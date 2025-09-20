@@ -12,6 +12,9 @@ openai_api_key = ""
 # Disable SSL verification for HTTP client (use only for trusted setups)
 disable_ssl = false
 
+# App mode (only 'chat' is supported)
+mode = "chat"
+
 # Assistant model name
 model_name = "gpt-4o-mini"
 

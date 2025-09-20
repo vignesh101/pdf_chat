@@ -2,3 +2,5 @@ flask>=3.0.0
 openai>=1.40.0
 httpx>=0.27.0
 tomli>=2.0.1; python_version < '3.11'
+faiss-cpu>=1.7.4
+numpy>=1.23

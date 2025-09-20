@@ -1,12 +1,12 @@
-# Document Chat (OpenAI Assistants + Files)
+# Document Chat (Embeddings + FAISS)
 
-A simple Python web app to upload documents and chat with them using the OpenAI Assistants API (v2) with file search. Includes a minimal yet polished chat UI and a flexible config supporting custom proxies and base URLs.
+A simple Python web app to upload documents and chat with them using OpenAI Embeddings for retrieval and a local FAISS vector index. Includes a minimal yet polished chat UI and a flexible config supporting custom proxies and base URLs.
 
 ## Features
 
-- Upload files to OpenAI and attach to a vector store
-- Assistant with `file_search` tool to ground answers in uploaded files
-- Per-session threads; persistent assistant/vector store
+- Upload files and index them locally (FAISS)
+- Retrieve top matching chunks via embeddings similarity
+- Chat with grounded answers using retrieved snippets
 - Configurable via `config.toml` and environment variables
 - Optional HTTP proxy and SSL verification toggle
 
@@ -18,9 +18,9 @@ Create a `config.toml` at the project root or export environment variables. The 
 - `openai_base_url` (`OPENAI_BASE_URL`) — Override the OpenAI API base URL (e.g., for gateways).
 - `openai_api_key` (`OPENAI_API_KEY`) — Your OpenAI API key.
 - `disable_ssl` (`DISABLE_SSL`) — Set to `true` to disable SSL verification (use only for trusted setups).
-- `mode` (`MODE`) — One of `assistants` (default) or `chat`. Use `chat` for custom OpenAI‑compatible servers that do not support Assistants/Vector Stores.
+- `mode` (`MODE`) — Only `chat` is supported. Retrieval uses local FAISS + Embeddings.
 - `model_name` (`MODEL_NAME`) — The model to use (Assistant or Chat depending on mode), e.g., `gpt-4o-mini`.
-- `embedding_model_name` (`EMBEDDING_MODEL_NAME`) — Reserved for embedding model selection. Note: current stable OpenAI SDKs create vector stores without an explicit embedding model parameter; this setting may be ignored depending on your SDK version.
+- `embedding_model_name` (`EMBEDDING_MODEL_NAME`) — The embedding model to use (e.g., `text-embedding-3-small`).
 
 An example config is provided in `config.example.toml`.
 
@@ -43,9 +43,10 @@ An example config is provided in `config.example.toml`.
    pip install -r requirements.txt
    ```
 
-3. Run the app:
+3. Install FAISS (CPU) and run the app:
 
    ```sh
+   pip install -r requirements.txt
    FLASK_APP=app.py FLASK_ENV=development flask run --port 5000
    ```
 
@@ -53,13 +54,6 @@ An example config is provided in `config.example.toml`.
 
 ## Notes
 
-- This app uses Assistants API v2 with `file_search` and a vector store. First run creates and persists the assistant/vector store IDs under `data/state.json`.
-- Vector store creation currently does not accept an explicit embedding model in many SDK versions; the app creates the vector store with a name only. The `embedding_model_name` setting is kept for forward compatibility and may be ignored.
- 
-### Modes
-
-- `assistants` (default): Uses Assistants API v2 with file_search and a vector store. Requires an API/base URL that implements these endpoints.
-- `chat`: Skips Assistants and Vector Stores. Uploaded files are indexed locally (simple TF‑IDF) and the app sends Chat Completions with the top snippets added to the system prompt. Works with most OpenAI‑compatible servers that support Chat Completions.
-- Files uploaded through the UI are sent to the OpenAI Files API with `purpose="assistants"`.
+- This app does not use the Vector Stores API. It calls the Embeddings endpoint to build a local FAISS index under `data/` and uses Chat Completions for responses.
 - If you use a proxy or custom base URL (e.g., gateways), set them in the config.
 - For production, set a `SECRET_KEY` environment variable for Flask sessions.
