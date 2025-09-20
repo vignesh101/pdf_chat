@@ -7,56 +7,99 @@
     <link rel="stylesheet" href="/static/styles.css" />
   </head>
   <body>
-    <div class="container">
-      <header class="header">
-        <div class="brand">
-          <h1>Document Chat</h1>
-          <span class="tag">RAG</span>
+    <div class="app">
+      <!-- Sidebar -->
+      <aside class="sidebar" id="sidebar">
+        <div class="sidebar-header">
+          <div class="sidebar-brand">
+            <h1>Document Chat</h1>
+            <span class="tag">RAG</span>
+          </div>
+          <button class="sidebar-toggle" id="sidebar-close" aria-label="Close sidebar">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M18 6L6 18M6 6l12 12"/>
+            </svg>
+          </button>
         </div>
-        <div class="config">
-          <span>Model: <code>{{ model_name }}</code></span>
-          {% if proxy_url %}<span>Proxy: <code>{{ proxy_url }}</code></span>{% endif %}
-          {% if base_url %}<span>Base URL: <code>{{ base_url }}</code></span>{% endif %}
-          {% if disable_ssl %}<span class="warn">SSL Verify: disabled</span>{% endif %}
-        </div>
-      </header>
 
-      <main class="main">
-        <aside class="sidebar">
-          <section class="uploader" id="uploader">
-            <h2>Upload Files</h2>
+        <div class="sidebar-content">
+          <section class="uploader">
+            <h3>Upload Documents</h3>
             <form id="upload-form">
               <div class="dropzone" id="dropzone">
                 <input type="file" id="file" name="file" multiple />
                 <div class="dz-instructions">
-                  <strong>Drag & drop</strong> files here or click to browse
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                    <polyline points="7,10 12,15 17,10"/>
+                    <line x1="12" y1="15" x2="12" y2="3"/>
+                  </svg>
+                  <span>Drop files here or click to browse</span>
                 </div>
               </div>
-              <button type="submit">Upload</button>
-              <span id="upload-status"></span>
+              <button type="submit" class="upload-btn">Upload Files</button>
+              <div id="upload-status" class="upload-status"></div>
             </form>
           </section>
 
-          <section id="history-panel" class="history">
-            <header>Chat History</header>
-            <ol id="history-list" class="history-list"></ol>
+          <section class="chat-history">
+            <div class="history-header">
+              <h3>Chat History</h3>
+              <button id="btn-clear" type="button" class="clear-btn" title="Clear chat history">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M3 6h18M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6m3 0V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/>
+                </svg>
+              </button>
+            </div>
+            <div id="history-list" class="history-list"></div>
+            <div id="history-meta" class="history-meta"></div>
           </section>
-        </aside>
+        </div>
 
-        <section class="chat">
-          <div class="chat-controls">
-            <button id="btn-toggle-history" type="button">Show History</button>
-            <button id="btn-clear" type="button" class="danger">Clear Chat</button>
-            <span id="history-meta" class="muted"></span>
+        <div class="sidebar-footer">
+          <div class="config-info">
+            <div class="config-item">Model: <code>{{ model_name }}</code></div>
+            {% if proxy_url %}<div class="config-item">Proxy: <code>{{ proxy_url }}</code></div>{% endif %}
+            {% if base_url %}<div class="config-item">Base URL: <code>{{ base_url }}</code></div>{% endif %}
+            {% if disable_ssl %}<div class="config-item warn">SSL Verify: disabled</div>{% endif %}
           </div>
+        </div>
+      </aside>
+
+      <!-- Main Chat Area -->
+      <main class="main-content">
+        <header class="chat-header">
+          <button class="sidebar-toggle" id="sidebar-toggle" aria-label="Toggle sidebar">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="3" y1="6" x2="21" y2="6"/>
+              <line x1="3" y1="12" x2="21" y2="12"/>
+              <line x1="3" y1="18" x2="21" y2="18"/>
+            </svg>
+          </button>
+          <h1>Document Chat</h1>
+        </header>
+
+        <div class="chat-container">
           <div id="messages" class="messages"></div>
-          <form id="chat-form" class="chat-form">
-            <textarea id="message" rows="1" placeholder="Ask about your documents... (Shift+Enter for newline)" autocomplete="off"></textarea>
-            <button id="btn-send" type="submit">Send</button>
-          </form>
-        </section>
+          <div class="chat-input-container">
+            <form id="chat-form" class="chat-form">
+              <div class="input-wrapper">
+                <textarea id="message" rows="1" placeholder="Message Document Chat..." autocomplete="off"></textarea>
+                <button id="btn-send" type="submit" aria-label="Send message">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="22" y1="2" x2="11" y2="13"/>
+                    <polygon points="22,2 15,22 11,13 2,9 22,2"/>
+                  </svg>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
       </main>
     </div>
+
+    <!-- Sidebar backdrop for mobile -->
+    <div class="sidebar-backdrop" id="sidebar-backdrop"></div>
 
     <script>
       const $ = (sel) => document.querySelector(sel);
@@ -65,12 +108,16 @@
       const chatForm = $("#chat-form");
       const uploadStatus = $("#upload-status");
       const dropzone = $("#dropzone");
-      const btnToggleHistory = $('#btn-toggle-history');
       const btnClear = $('#btn-clear');
-      const historyPanel = $('#history-panel');
       const historyList = $('#history-list');
       const historyMeta = $('#history-meta');
       const btnSend = $('#btn-send');
+
+      // Sidebar elements
+      const sidebar = $('#sidebar');
+      const sidebarToggle = $('#sidebar-toggle');
+      const sidebarClose = $('#sidebar-close');
+      const sidebarBackdrop = $('#sidebar-backdrop');
 
       function escapeHtml(str) {
         const map = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
@@ -155,21 +202,48 @@
       function renderHistoryList(messages) {
         if (!Array.isArray(messages)) messages = [];
         historyList.innerHTML = '';
-        messages.forEach((m) => {
-          const li = document.createElement('li');
-          li.className = 'history-item ' + (m.role || '');
-          const role = document.createElement('span');
-          role.className = 'role';
-          role.textContent = (m.role || '').toUpperCase();
-          const text = document.createElement('span');
-          text.className = 'preview';
-          text.textContent = m.text || '';
-          li.appendChild(role);
-          li.appendChild(text);
-          historyList.appendChild(li);
+
+        if (messages.length === 0) {
+          historyList.innerHTML = '<div class="empty-history">No messages yet</div>';
+          historyMeta.textContent = '';
+          return;
+        }
+
+        messages.forEach((m, index) => {
+          const item = document.createElement('div');
+          item.className = 'history-item ' + (m.role || '');
+
+          const content = document.createElement('div');
+          content.className = 'history-content';
+          content.textContent = (m.text || '').slice(0, 100) + (m.text && m.text.length > 100 ? '...' : '');
+
+          const timestamp = document.createElement('div');
+          timestamp.className = 'history-timestamp';
+          timestamp.textContent = m.role === 'user' ? 'You' : 'Assistant';
+
+          item.appendChild(content);
+          item.appendChild(timestamp);
+          historyList.appendChild(item);
         });
+
         const count = messages.length || 0;
         historyMeta.textContent = `${count} message${count === 1 ? '' : 's'}`;
+      }
+
+      // Sidebar toggle functionality
+      function toggleSidebar() {
+        sidebar.classList.toggle('collapsed');
+        sidebarBackdrop.classList.toggle('active');
+      }
+
+      function closeSidebar() {
+        sidebar.classList.add('collapsed');
+        sidebarBackdrop.classList.remove('active');
+      }
+
+      function openSidebar() {
+        sidebar.classList.remove('collapsed');
+        sidebarBackdrop.classList.add('active');
       }
 
       async function refreshMessages() {
@@ -279,17 +353,15 @@
         msgInput.style.height = Math.min(200, msgInput.scrollHeight) + 'px';
       });
 
-      // Initialize toggle button text based on current visibility
-      btnToggleHistory.textContent = historyPanel.hasAttribute('hidden') ? 'Show History' : 'Hide History';
+      // Sidebar event listeners
+      sidebarToggle.addEventListener('click', toggleSidebar);
+      sidebarClose.addEventListener('click', closeSidebar);
+      sidebarBackdrop.addEventListener('click', closeSidebar);
 
-      btnToggleHistory.addEventListener('click', () => {
-        const isHidden = historyPanel.hasAttribute('hidden');
-        if (isHidden) {
-          historyPanel.removeAttribute('hidden');
-          btnToggleHistory.textContent = 'Hide History';
-        } else {
-          historyPanel.setAttribute('hidden', '');
-          btnToggleHistory.textContent = 'Show History';
+      // Handle escape key to close sidebar
+      document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && !sidebar.classList.contains('collapsed')) {
+          closeSidebar();
         }
       });
 
