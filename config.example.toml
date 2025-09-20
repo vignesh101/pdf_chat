@@ -21,3 +21,11 @@ model_name = "gpt-4o-mini"
 # Embedding model (reserved / may be ignored by current SDKs)
 # Common values: "text-embedding-3-small" (cheap), "text-embedding-3-large" (high quality)
 embedding_model_name = "text-embedding-3-small"
+
+# Confluence integration (optional)
+# Base URL of your Confluence site, e.g. "https://your-domain.atlassian.net" (with or without trailing /wiki)
+confluence_base_url = ""
+# Access token for Confluence. For Atlassian Cloud you can use:
+#  - Basic auth with "email:api_token" (the app will send it as Basic if it contains a colon), or
+#  - A Bearer token (the app will send it as Bearer if there is no colon)
+confluence_access_token = ""

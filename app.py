@@ -8,6 +8,8 @@ from config_loader import load_config
 from openai_client import build_openai_client, build_httpx_client
 import embedding_store
 import web_embedding_store as web_store
+import confluence_embedding_store as conf_store
+from confluence_client import ConfluenceAPI
 
 
 def create_app() -> Flask:
@@ -99,6 +101,14 @@ def create_app() -> Flask:
     http_client = build_httpx_client(cfg)
     app.config['OPENAI_CLIENT'] = client
     app.config['HTTP_CLIENT'] = http_client
+    # Optional Confluence API client
+    conf_api = None
+    try:
+        if getattr(cfg, 'confluence_base_url', None) and getattr(cfg, 'confluence_access_token', None):
+            conf_api = ConfluenceAPI(cfg.confluence_base_url, cfg.confluence_access_token, http_client)
+    except Exception:
+        conf_api = None
+    app.config['CONF_API'] = conf_api
     app.config['MODEL_NAME'] = cfg.model_name
     # Initialize local FAISS embedding store only if client is available
     try:
@@ -106,6 +116,8 @@ def create_app() -> Flask:
             embedding_store.init(client, embedding_model_name=cfg.embedding_model_name)
             # Initialize separate FAISS store for Web chat
             web_store.init(client, embedding_model_name=cfg.embedding_model_name)
+            # Initialize separate FAISS store for Confluence chat
+            conf_store.init(client, embedding_model_name=cfg.embedding_model_name)
     except Exception:
         # Do not block app startup; search/upload will surface errors
         pass
@@ -115,6 +127,7 @@ def create_app() -> Flask:
         # Single mode: Chat with local FAISS RAG
         session.setdefault('chat_history', [])
         session.setdefault('web_chat_history', [])
+        session.setdefault('conf_chat_history', [])
         thread_id = None
         return render_template('index.html',
                                model_name=cfg.model_name,
@@ -396,6 +409,241 @@ def create_app() -> Flask:
         })
         session['web_chat_history'] = hist
         return jsonify({'ok': True, 'messages': session.get('web_chat_history', [])})
+
+    # --- Confluence Chat: search your Confluence and chat ---
+    @app.post('/confchat')
+    def confchat():
+        data = request.get_json(silent=True) or {}
+        message = (data.get('message') or '').strip()
+        if not message:
+            return jsonify({'ok': False, 'error': 'Empty message'}), 400
+
+        conf_api = app.config.get('CONF_API')
+        if conf_api is None:
+            return jsonify({'ok': False, 'error': 'Confluence is not configured. Set confluence_base_url and confluence_access_token in config.'}), 400
+
+        try:
+            max_results = int(data.get('max_results') or 5)
+        except Exception:
+            max_results = 5
+        try:
+            k_ctx = int(data.get('k_ctx') or 5)
+        except Exception:
+            k_ctx = 5
+        spaces_raw = (data.get('spaces') or '').strip()
+        spaces = [s.strip() for s in spaces_raw.split(',') if s and s.strip()] if spaces_raw else []
+        max_results = max(1, min(10, max_results))
+        k_ctx = max(1, min(10, k_ctx))
+
+        # Search Confluence and fetch page contents
+        hits = []
+        try:
+            hits = conf_api.search_pages(message, spaces=spaces, limit=max_results)
+        except Exception:
+            hits = []
+
+        try:
+            for h in hits:
+                pid = str(h.get('id') or '')
+                if not pid:
+                    continue
+                text, title = conf_api.get_page_content_text(pid)
+                url = h.get('url') or ''
+                conf_store.add_page(url or (title or pid), title, text or '')
+        except Exception:
+            pass
+
+        # Retrieve best context from Confluence index
+        try:
+            ctx_chunks_meta = conf_store.search_with_meta(message, k=k_ctx)
+        except Exception:
+            ctx_chunks_meta = []
+        context_text = "\n\n".join([
+            f"[Confluence {i+1}] {it.get('file_name') or it.get('file_id')}\n{it.get('text', '')}"
+            for i, it in enumerate(ctx_chunks_meta)
+        ])
+        system_prompt = (
+            "You are a helpful assistant with access to Confluence page excerpts. "
+            "Use the provided Confluence content to answer accurately. If the answer isn't present, say you aren't sure.\n\n"
+            + (f"Confluence Content:\n{context_text}" if context_text else "No Confluence content available.")
+        )
+
+        client = app.config.get('OPENAI_CLIENT')
+        if client is None:
+            return jsonify({'ok': False, 'error': 'OpenAI client not configured. Set OPENAI_API_KEY or update config.toml.'}), 500
+        try:
+            resp = client.chat.completions.create(
+                model=cfg.model_name,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": message},
+                ],
+            )
+            answer = resp.choices[0].message.content if resp and resp.choices else ""
+        except Exception as e:
+            return jsonify({'ok': False, 'error': str(e)}), 500
+
+        # Update confluence history
+        hist = session.get('conf_chat_history', [])
+        hist.append({'id': f'user-{len(hist)+1}', 'role': 'user', 'text': message})
+        hist.append({
+            'id': f'assistant-{len(hist)+1}',
+            'role': 'assistant',
+            'text': answer,
+            'sources': [
+                {
+                    'file_id': it.get('file_id'),
+                    'file_name': it.get('file_name'),
+                    'score': it.get('score'),
+                    'text': (it.get('text') or '')[:app.config.get('MAX_SOURCE_PREVIEW', 300)],
+                }
+                for it in ctx_chunks_meta
+            ],
+        })
+        session['conf_chat_history'] = hist
+        return jsonify({'ok': True, 'messages': session.get('conf_chat_history', [])})
+
+    @app.post('/confchat_stream')
+    def confchat_stream():
+        from flask import Response, stream_with_context
+        data = request.get_json(silent=True) or {}
+        message = (data.get('message') or '').strip()
+        if not message:
+            return jsonify({'ok': False, 'error': 'Empty message'}), 400
+
+        conf_api = app.config.get('CONF_API')
+        if conf_api is None:
+            return jsonify({'ok': False, 'error': 'Confluence is not configured. Set confluence_base_url and confluence_access_token in config.'}), 400
+
+        try:
+            max_results = int(data.get('max_results') or 5)
+        except Exception:
+            max_results = 5
+        try:
+            k_ctx = int(data.get('k_ctx') or 5)
+        except Exception:
+            k_ctx = 5
+        spaces_raw = (data.get('spaces') or '').strip()
+        spaces = [s.strip() for s in spaces_raw.split(',') if s and s.strip()] if spaces_raw else []
+        max_results = max(1, min(10, max_results))
+        k_ctx = max(1, min(10, k_ctx))
+
+        hits = []
+        try:
+            hits = conf_api.search_pages(message, spaces=spaces, limit=max_results)
+        except Exception:
+            hits = []
+        try:
+            for h in hits:
+                pid = str(h.get('id') or '')
+                if not pid:
+                    continue
+                text, title = conf_api.get_page_content_text(pid)
+                url = h.get('url') or ''
+                conf_store.add_page(url or (title or pid), title, text or '')
+        except Exception:
+            pass
+
+        try:
+            ctx_chunks_meta = conf_store.search_with_meta(message, k=k_ctx)
+        except Exception:
+            ctx_chunks_meta = []
+        context_text = "\n\n".join([
+            f"[Confluence {i+1}] {it.get('file_name') or it.get('file_id')}\n{it.get('text', '')}"
+            for i, it in enumerate(ctx_chunks_meta)
+        ])
+        system_prompt = (
+            "You are a helpful assistant with access to Confluence page excerpts. "
+            "Use the provided Confluence content to answer accurately. If the answer isn't present, say you aren't sure.\n\n"
+            + (f"Confluence Content:\n{context_text}" if context_text else "No Confluence content available.")
+        )
+        client = app.config.get('OPENAI_CLIENT')
+        if client is None:
+            return jsonify({'ok': False, 'error': 'OpenAI client not configured. Set OPENAI_API_KEY or update config.toml.'}), 500
+
+        try:
+            session['pending_conf_assistant'] = {
+                'sources': [
+                    {
+                        'file_id': it.get('file_id'),
+                        'file_name': it.get('file_name'),
+                        'score': it.get('score'),
+                        'text': (it.get('text') or '')[:app.config.get('MAX_SOURCE_PREVIEW', 300)],
+                    }
+                    for it in ctx_chunks_meta
+                ],
+            }
+        except Exception:
+            pass
+
+        def generate():
+            try:
+                stream = client.chat.completions.create(
+                    model=cfg.model_name,
+                    messages=[
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": message},
+                    ],
+                    stream=True,
+                )
+                for chunk in stream:
+                    try:
+                        delta = chunk.choices[0].delta
+                        content = getattr(delta, 'content', None) if delta is not None else None
+                    except Exception:
+                        content = None
+                    if content:
+                        yield content
+            except Exception as e:
+                yield f"\n[ERROR] {str(e)}"
+
+        return Response(stream_with_context(generate()), mimetype='text/plain; charset=utf-8')
+
+    @app.post('/conf/commit')
+    def conf_commit():
+        data = request.get_json(silent=True) or {}
+        question = (data.get('question') or '').strip()
+        answer = (data.get('answer') or '').strip()
+        if not question or not answer:
+            return jsonify({'ok': False, 'error': 'question and answer required'}), 400
+        try:
+            hist = session.get('conf_chat_history', [])
+            pending = session.get('pending_conf_assistant') or {}
+            sources = pending.get('sources') or []
+            # Append user then assistant
+            hist.append({
+                'id': f'user-{len(hist)+1}',
+                'role': 'user',
+                'text': question,
+            })
+            hist.append({
+                'id': f'assistant-{len(hist)+1}',
+                'role': 'assistant',
+                'text': answer,
+                'sources': sources,
+            })
+            session['conf_chat_history'] = hist
+            session.pop('pending_conf_assistant', None)
+            return jsonify({'ok': True, 'messages': session.get('conf_chat_history', [])})
+        except Exception as e:
+            return jsonify({'ok': False, 'error': str(e)}), 500
+
+    @app.get('/conf/messages')
+    def conf_get_messages():
+        return jsonify({'ok': True, 'messages': session.get('conf_chat_history', [])})
+
+    @app.post('/conf/clear')
+    def conf_clear_messages():
+        session['conf_chat_history'] = []
+        return jsonify({'ok': True, 'messages': []})
+
+    @app.post('/conf/index/clear_all')
+    def conf_index_clear_all():
+        try:
+            st = conf_store.clear_all()
+            return jsonify({'ok': True, 'index': st})
+        except Exception as e:
+            return jsonify({'ok': False, 'error': str(e)}), 500
 
     @app.post('/webchat_stream')
     def webchat_stream():

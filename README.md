@@ -9,6 +9,7 @@ A simple Python web app to upload documents and chat with them using OpenAI Embe
 - Retrieve top matching chunks via embeddings similarity
 - Chat with grounded answers using retrieved snippets
 - Web Chat: ask questions answered from the internet via DuckDuckGo search (RAG over fetched pages)
+- Confluence Chat: search Confluence pages (via REST API), cache content locally and answer grounded in those excerpts
 - Sources panel under replies with snippet previews and scores
 - Drag & drop uploads and copy-to-clipboard for messages
 - Configurable via `config.toml` and environment variables
@@ -25,6 +26,8 @@ Create a `config.toml` at the project root or export environment variables. The 
 - `mode` (`MODE`) — Only `chat` is supported. Retrieval uses local FAISS + Embeddings.
 - `model_name` (`MODEL_NAME`) — The model to use (Assistant or Chat depending on mode), e.g., `gpt-4o-mini`.
 - `embedding_model_name` (`EMBEDDING_MODEL_NAME`) — The embedding model to use (e.g., `text-embedding-3-small`).
+ - `confluence_base_url` (`CONFLUENCE_BASE_URL`) — Base URL of your Confluence site (e.g., `https://your-domain.atlassian.net`). The app tries both `/wiki/rest/api` and `/rest/api` paths.
+ - `confluence_access_token` (`CONFLUENCE_ACCESS_TOKEN`) — Token used to authenticate with Confluence. If the value contains a colon (e.g., `email@example.com:API_TOKEN`) it is sent as Basic auth. Otherwise it is sent as a Bearer token (for DC PATs).
 
 An example config is provided in `config.example.toml`.
 
@@ -86,6 +89,28 @@ Notes and limits:
 - Some sites may block automated fetching; results may be partial or missing.
 - Respect target sites’ terms of use and robots policies.
 - Network errors are handled gracefully (the answer may indicate missing web content).
+
+## Confluence Chat
+
+This app includes a “Confluence” chat mode that searches your Confluence using the REST API, fetches matching pages, stores their text in a dedicated FAISS index, and then answers questions grounded in those excerpts.
+
+- Configure `confluence_base_url` and `confluence_access_token` in `config.toml` or environment.
+- Proxies and SSL verification settings are honored (see `proxy_url` and `disable_ssl`).
+- Retrieved Confluence content is stored under `data/confluence` as a separate FAISS index.
+
+How it works:
+- Build a Confluence CQL query for your prompt and optional space filters.
+- Fetch up to N pages’ rendered HTML and convert to plain text.
+- Chunk, embed, and add to the Confluence FAISS index.
+- Retrieve the top matches and pass as context to Chat Completions.
+
+Using it:
+- In the UI, click the “Confluence” tab. Optionally limit to specific spaces (comma-separated), adjust “Pages” and “Context k”, then ask your question.
+- Clear just the Confluence cache via the “Clear Confluence Cache” button in the Status panel.
+
+Notes and limits:
+- Access depends on your token’s permissions; some pages may be inaccessible.
+- HTML-to-text is best-effort, so some formatting/tables may be simplified.
 
 ## Notes
 

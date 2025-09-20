@@ -23,6 +23,9 @@ class AppConfig:
     openai_base_url: Optional[str]
     openai_api_key: Optional[str]
     disable_ssl: bool
+    # Confluence integration
+    confluence_base_url: Optional[str]
+    confluence_access_token: Optional[str]
     mode: str
     model_name: str
     embedding_model_name: Optional[str]
@@ -41,6 +44,8 @@ def load_config() -> AppConfig:
     proxy_url = get_cfg('proxy_url', 'PROXY_URL', None)
     openai_base_url = get_cfg('openai_base_url', 'OPENAI_BASE_URL', None)
     openai_api_key = get_cfg('openai_api_key', 'OPENAI_API_KEY', None)
+    confluence_base_url = get_cfg('confluence_base_url', 'CONFLUENCE_BASE_URL', None)
+    confluence_access_token = get_cfg('confluence_access_token', 'CONFLUENCE_ACCESS_TOKEN', None)
     disable_ssl_raw = get_cfg('disable_ssl', 'DISABLE_SSL', False)
     mode = str(get_cfg('mode', 'MODE', 'chat')).lower()
     if mode not in ("chat",):
@@ -60,6 +65,8 @@ def load_config() -> AppConfig:
         openai_base_url=openai_base_url or None,
         openai_api_key=openai_api_key or None,
         disable_ssl=disable_ssl,
+        confluence_base_url=confluence_base_url or None,
+        confluence_access_token=confluence_access_token or None,
         mode=mode,
         model_name=str(model_name),
         embedding_model_name=str(embedding_model_name) if embedding_model_name else None,
