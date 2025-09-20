@@ -496,6 +496,7 @@
               messagesEl.scrollTop = messagesEl.scrollHeight;
             }
             // After stream ends, persist the conversation on the server
+            let committed = false;
             try {
               const saveRes = await fetch('/chat/commit', {
                 method: 'POST',
@@ -506,11 +507,16 @@
               if (!saveDj.ok) {
                 // Keep the streamed text visible and surface the error subtly
                 console.error('Commit failed:', saveDj.error);
+              } else {
+                committed = true;
               }
             } catch (e) {
               console.error('Commit request failed', e);
             }
-            await refreshMessages();
+            // Only refresh from server if commit succeeded; otherwise keep live bubbles
+            if (committed) {
+              await refreshMessages();
+            }
           } else {
             const r = await fetch('/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ message: text }) });
             const dj = await r.json();
