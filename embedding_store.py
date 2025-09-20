@@ -113,15 +113,10 @@ def _ensure_index(dim: int):
         _META["dim"] = dim
 
 
-def add_file(file_name: str, content_bytes: bytes) -> str:
-    """Add file content to FAISS index. Returns a pseudo file_id."""
+def add_text(file_name: str, text: str) -> str:
+    """Add raw text to FAISS index. Returns a pseudo file_id."""
     global _META, _INDEX, _DIM
-    # Decode text
-    try:
-        text = content_bytes.decode("utf-8", errors="ignore")
-    except Exception:
-        text = ""
-    if not text.strip():
+    if not (text or "").strip():
         return "local:empty"
 
     chunks = _chunk_text(text)
@@ -157,6 +152,15 @@ def add_file(file_name: str, content_bytes: bytes) -> str:
     return _META["chunks"][-1]["file_id"] if _META.get("chunks") else "local:empty"
 
 
+def add_file(file_name: str, content_bytes: bytes) -> str:
+    """Backwards-compatible: decode bytes and index. Prefer add_text() when possible."""
+    try:
+        text = content_bytes.decode("utf-8", errors="ignore")
+    except Exception:
+        text = ""
+    return add_text(file_name, text)
+
+
 def _meta_file_id(file_name: str) -> str:
     # Stable pseudo-id based on order: count of files with same name so far
     cnt = 1
@@ -186,4 +190,3 @@ def search(query: str, k: int = 5) -> List[Tuple[str, float]]:
         except Exception:
             continue
     return results
-

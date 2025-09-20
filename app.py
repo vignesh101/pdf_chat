@@ -34,23 +34,29 @@ def create_app() -> Flask:
 
     @app.post('/upload')
     def upload():
+        from file_ingest import extract_text
+
         if 'file' not in request.files:
             return jsonify({'ok': False, 'error': 'No file part'}), 400
         files = request.files.getlist('file')
         saved_ids = []
-        tmp_dir = os.path.join(os.getcwd(), 'uploads')
-        os.makedirs(tmp_dir, exist_ok=True)
+        os.makedirs(os.path.join(os.getcwd(), 'uploads'), exist_ok=True)
         try:
             for f in files:
                 if not f.filename:
                     continue
-                # Index file content locally (embeddings + FAISS) without persisting the file
-                content = f.read()
-                file_id = embedding_store.add_file(f.filename, content)
+                # Extract text (handles PDFs locally if pypdf/PyPDF2 is installed)
+                raw = f.read()
+                text = extract_text(f.filename, raw)
+                file_id = embedding_store.add_text(f.filename, text)
                 saved_ids.append(file_id)
             return jsonify({'ok': True, 'file_ids': saved_ids})
         except Exception as e:
-            return jsonify({'ok': False, 'error': str(e)}), 500
+            # Surface helpful message for missing PDF libs
+            msg = str(e)
+            if 'PDF support requires' in msg:
+                return jsonify({'ok': False, 'error': msg}), 400
+            return jsonify({'ok': False, 'error': msg}), 500
 
     @app.post('/chat')
     def chat():

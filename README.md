@@ -5,6 +5,7 @@ A simple Python web app to upload documents and chat with them using OpenAI Embe
 ## Features
 
 - Upload files and index them locally (FAISS)
+- PDF ingestion locally (requires `pypdf` or `PyPDF2`)
 - Retrieve top matching chunks via embeddings similarity
 - Chat with grounded answers using retrieved snippets
 - Configurable via `config.toml` and environment variables
@@ -47,6 +48,8 @@ An example config is provided in `config.example.toml`.
 
    ```sh
    pip install -r requirements.txt
+   # Optional: enable PDF support
+   # pip install pypdf
    FLASK_APP=app.py FLASK_ENV=development flask run --port 5000
    ```
 
@@ -54,6 +57,7 @@ An example config is provided in `config.example.toml`.
 
 ## Notes
 
-- This app does not use the Vector Stores API. It calls the Embeddings endpoint to build a local FAISS index under `data/` and uses Chat Completions for responses.
+- This app does not use the Vector Stores or Files APIs. It calls the Embeddings endpoint to build a local FAISS index under `data/` and uses Chat Completions for responses.
+- PDF uploads are parsed locally if `pypdf` (or `PyPDF2`) is installed. Without it, uploading PDFs will return a clear error message.
 - If you use a proxy or custom base URL (e.g., gateways), set them in the config.
 - For production, set a `SECRET_KEY` environment variable for Flask sessions.
