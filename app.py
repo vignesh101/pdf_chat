@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 from flask import Flask, render_template, request, jsonify, session
+from typing import Any, Dict, List
 
 from config_loader import load_config
 from openai_client import build_openai_client
@@ -12,6 +13,78 @@ def create_app() -> Flask:
     cfg = load_config()
     app = Flask(__name__)
     app.config['SECRET_KEY'] = cfg.secret_key or os.environ.get('FLASK_SECRET', 'dev-secret-change-me')
+
+    # Prefer server-side sessions if Flask-Session is available.
+    # Falls back gracefully to client-side secure cookies.
+    app.config['SESSION_BACKEND'] = 'client'
+    try:
+        # Lazy import so the app still runs without the extra dependency
+        from flask_session import Session as FlaskSession  # type: ignore
+        sessions_dir = os.path.join(os.getcwd(), 'data', 'flask_sessions')
+        os.makedirs(sessions_dir, exist_ok=True)
+        app.config.update(
+            SESSION_TYPE='filesystem',
+            SESSION_FILE_DIR=sessions_dir,
+            SESSION_PERMANENT=False,
+            SESSION_USE_SIGNER=True,
+            SESSION_COOKIE_NAME='dc_session',
+        )
+        FlaskSession(app)
+        app.config['SESSION_BACKEND'] = 'server'
+    except Exception:
+        # Keep using signed cookie sessions
+        pass
+
+    # Session size management knobs (smaller limits for cookie-backed sessions)
+    if app.config['SESSION_BACKEND'] == 'server':
+        app.config.setdefault('MAX_HISTORY_MESSAGES', 50)
+        app.config.setdefault('MAX_HISTORY_TEXT_LEN', 16000)  # effectively unlimited for typical usage
+        app.config.setdefault('MAX_SOURCE_PREVIEW', 1000)
+    else:
+        # Conservative caps to stay well under ~4KB cookie limits
+        app.config.setdefault('MAX_HISTORY_MESSAGES', 12)
+        app.config.setdefault('MAX_HISTORY_TEXT_LEN', 1500)
+        app.config.setdefault('MAX_SOURCE_PREVIEW', 300)
+
+    def _compact_sources(sources: List[Dict[str, Any]] | None) -> List[Dict[str, Any]]:
+        if not sources:
+            return []
+        max_prev = int(app.config.get('MAX_SOURCE_PREVIEW', 300))
+        slim: List[Dict[str, Any]] = []
+        for s in sources:
+            if not isinstance(s, dict):
+                continue
+            # Preserve common meta, trim the text preview
+            text = s.get('text') or ''
+            slim.append({
+                'file_id': s.get('file_id'),
+                'file_name': s.get('file_name'),
+                'score': s.get('score'),
+                'text': text[:max_prev],
+            })
+        return slim
+
+    def _store_history(hist: List[Dict[str, Any]]) -> None:
+        """Clamp history length and text sizes before saving to session.
+        This prevents over-large client-side cookies while remaining no-op-ish on server sessions.
+        """
+        max_n = int(app.config.get('MAX_HISTORY_MESSAGES', 50))
+        max_txt = int(app.config.get('MAX_HISTORY_TEXT_LEN', 16000))
+
+        def clamp_msg(m: Dict[str, Any]) -> Dict[str, Any]:
+            text = (m.get('text') or '')
+            slim: Dict[str, Any] = {
+                'id': m.get('id'),
+                'role': m.get('role'),
+                'text': text[:max_txt],
+            }
+            if m.get('role') != 'user':
+                srcs = m.get('sources')
+                if isinstance(srcs, list):
+                    slim['sources'] = _compact_sources(srcs)
+            return slim
+
+        session['chat_history'] = [clamp_msg(m) for m in (hist[-max_n:])]
 
     # Build OpenAI client and hold it in app context (may be None if not configured)
     client = build_openai_client(cfg)
@@ -101,18 +174,17 @@ def create_app() -> Flask:
         except Exception as e:
             return jsonify({'ok': False, 'error': str(e)}), 500
 
-        # Update local history
+        # Update local history (compacted for session)
         hist = session.get('chat_history', [])
         hist.append({'id': f'user-{len(hist)+1}', 'role': 'user', 'text': message})
         hist.append({
             'id': f'assistant-{len(hist)+1}',
             'role': 'assistant',
             'text': answer,
-            'sources': ctx_chunks_meta,
+            'sources': _compact_sources(ctx_chunks_meta),
         })
-        # keep last 50
-        session['chat_history'] = hist[-50:]
-        return jsonify({'ok': True, 'messages': session['chat_history']})
+        _store_history(hist)
+        return jsonify({'ok': True, 'messages': session.get('chat_history', [])})
 
     @app.get('/messages')
     def get_messages():
@@ -148,7 +220,7 @@ def create_app() -> Flask:
         # streamed responses finalize headers before the generator completes.
         try:
             session['pending_assistant'] = {
-                'sources': ctx_chunks_meta,
+                'sources': _compact_sources(ctx_chunks_meta),
             }
         except Exception:
             pass
@@ -204,10 +276,10 @@ def create_app() -> Flask:
                 'text': answer,
                 'sources': sources,
             })
-            session['chat_history'] = hist[-50:]
+            _store_history(hist)
             # clear pending
             session.pop('pending_assistant', None)
-            return jsonify({'ok': True, 'messages': session['chat_history']})
+            return jsonify({'ok': True, 'messages': session.get('chat_history', [])})
         except Exception as e:
             return jsonify({'ok': False, 'error': str(e)}), 500
 

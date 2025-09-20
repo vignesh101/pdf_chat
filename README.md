@@ -63,3 +63,8 @@ An example config is provided in `config.example.toml`.
 - PDF uploads are parsed locally if `pypdf` (or `PyPDF2`) is installed. Without it, uploading PDFs will return a clear error message.
 - If you use a proxy or custom base URL (e.g., gateways), set them in the config.
 - For production, set a `SECRET_KEY` environment variable for Flask sessions.
+- Sessions: this app prefers server-side sessions when `Flask-Session` is installed. If you see a warning about the session cookie being too large, install the extra:
+  ```sh
+  pip install Flask-Session
+  ```
+  With `Flask-Session` present, the app stores session data on disk under `data/flask_sessions` and keeps the browser cookie small. Without it, the app falls back to signed cookies and automatically trims chat history and source previews to stay under browser cookie limits.
