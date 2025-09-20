@@ -62,7 +62,7 @@ html, body {
 }
 
 .sidebar.collapsed {
-  margin-left: calc(-1 * var(--sidebar-width));
+  transform: translateX(-100%);
 }
 
 .sidebar-header {
@@ -72,6 +72,12 @@ html, body {
   align-items: center;
   justify-content: space-between;
   min-height: var(--header-height);
+}
+
+.sidebar-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .sidebar-brand {
@@ -96,7 +102,8 @@ html, body {
   text-transform: uppercase;
 }
 
-.sidebar-toggle {
+.sidebar-toggle,
+.new-chat-btn {
   background: none;
   border: none;
   color: var(--text-muted);
@@ -109,9 +116,14 @@ html, body {
   justify-content: center;
 }
 
-.sidebar-toggle:hover {
+.sidebar-toggle:hover,
+.new-chat-btn:hover {
   background: var(--bg-sidebar-item-hover);
   color: var(--text-light);
+}
+
+.new-chat-btn:hover {
+  background: var(--accent);
 }
 
 .sidebar-content {
@@ -628,7 +640,7 @@ html, body {
   }
 
   .sidebar.collapsed {
-    margin-left: calc(-1 * var(--sidebar-width));
+    transform: translateX(-100%);
   }
 
   .main-content {

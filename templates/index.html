@@ -15,11 +15,18 @@
             <h1>Document Chat</h1>
             <span class="tag">RAG</span>
           </div>
-          <button class="sidebar-toggle" id="sidebar-close" aria-label="Close sidebar">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M18 6L6 18M6 6l12 12"/>
-            </svg>
-          </button>
+          <div class="sidebar-actions">
+            <button class="new-chat-btn" id="new-chat" title="Start new chat">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M12 5v14M5 12h14"/>
+              </svg>
+            </button>
+            <button class="sidebar-toggle" id="sidebar-close" aria-label="Close sidebar">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M18 6L6 18M6 6l12 12"/>
+              </svg>
+            </button>
+          </div>
         </div>
 
         <div class="sidebar-content">
@@ -118,6 +125,7 @@
       const sidebarToggle = $('#sidebar-toggle');
       const sidebarClose = $('#sidebar-close');
       const sidebarBackdrop = $('#sidebar-backdrop');
+      const newChatBtn = $('#new-chat');
 
       function escapeHtml(str) {
         const map = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
@@ -329,6 +337,7 @@
           });
           const data = await res.json();
           if (data.ok) {
+            thinking.remove(); // Remove thinking indicator
             await refreshMessages();
           } else {
             thinking.innerText = 'Error: ' + (data.error || 'failed');
@@ -378,6 +387,20 @@
           }
         } catch (e) {
           alert('Request failed while clearing.');
+        }
+      });
+
+      newChatBtn.addEventListener('click', async () => {
+        try {
+          const res = await fetch('/clear', { method: 'POST' });
+          const data = await res.json();
+          if (data.ok) {
+            await refreshMessages();
+          } else {
+            alert('Failed to start new chat: ' + (data.error || 'unknown error'));
+          }
+        } catch (e) {
+          alert('Request failed while starting new chat.');
         }
       });
 
