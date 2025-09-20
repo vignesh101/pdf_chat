@@ -1,0 +1,17 @@
+# Example configuration for Document Chat
+
+# Optional HTTP/HTTPS proxy URL, e.g. "http://localhost:7890"
+proxy_url = ""
+
+# Override OpenAI base URL (leave empty for default)
+openai_base_url = ""
+
+# OpenAI API key; you can also set OPENAI_API_KEY env var
+openai_api_key = ""
+
+# Disable SSL verification for HTTP client (use only for trusted setups)
+disable_ssl = false
+
+# Assistant model name
+model_name = "gpt-4o-mini"
+

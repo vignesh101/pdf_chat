@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Document Chat</title>
+    <link rel="stylesheet" href="/static/styles.css" />
+  </head>
+  <body>
+    <div class="container">
+      <header class="header">
+        <h1>Document Chat</h1>
+        <div class="config">
+          <span>Model: <code>{{ model_name }}</code></span>
+          {% if proxy_url %}<span>Proxy: <code>{{ proxy_url }}</code></span>{% endif %}
+          {% if base_url %}<span>Base URL: <code>{{ base_url }}</code></span>{% endif %}
+          {% if disable_ssl %}<span class="warn">SSL Verify: disabled</span>{% endif %}
+        </div>
+      </header>
+
+      <section class="uploader">
+        <h2>Upload Files</h2>
+        <form id="upload-form">
+          <input type="file" id="file" name="file" multiple />
+          <button type="submit">Upload</button>
+          <span id="upload-status"></span>
+        </form>
+      </section>
+
+      <section class="chat">
+        <div id="messages" class="messages"></div>
+        <form id="chat-form" class="chat-form">
+          <input type="text" id="message" placeholder="Ask about your documents..." autocomplete="off" />
+          <button type="submit">Send</button>
+        </form>
+      </section>
+    </div>
+
+    <script>
+      const $ = (sel) => document.querySelector(sel);
+      const messagesEl = $("#messages");
+      const uploadForm = $("#upload-form");
+      const chatForm = $("#chat-form");
+      const uploadStatus = $("#upload-status");
+
+      function appendMessage(role, text) {
+        const div = document.createElement('div');
+        div.className = 'msg ' + (role === 'user' ? 'user' : 'assistant');
+        div.innerText = text;
+        messagesEl.appendChild(div);
+        messagesEl.scrollTop = messagesEl.scrollHeight;
+      }
+
+      async function refreshMessages() {
+        try {
+          const res = await fetch('/messages');
+          const data = await res.json();
+          if (!data.ok) return;
+          messagesEl.innerHTML = '';
+          (data.messages || []).forEach(m => appendMessage(m.role, m.text || ''));
+        } catch (e) {
+          console.error(e);
+        }
+      }
+
+      uploadForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const fd = new FormData(uploadForm);
+        uploadStatus.textContent = 'Uploading...';
+        try {
+          const res = await fetch('/upload', { method: 'POST', body: fd });
+          const data = await res.json();
+          if (data.ok) {
+            uploadStatus.textContent = `Uploaded ${data.file_ids.length} file(s)`;
+          } else {
+            uploadStatus.textContent = `Error: ${data.error || 'upload failed'}`;
+          }
+        } catch (err) {
+          uploadStatus.textContent = 'Upload failed.';
+        }
+      });
+
+      chatForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const input = $("#message");
+        const text = input.value.trim();
+        if (!text) return;
+        appendMessage('user', text);
+        input.value = '';
+        const thinking = document.createElement('div');
+        thinking.className = 'msg assistant thinking';
+        thinking.innerText = 'Thinking…';
+        messagesEl.appendChild(thinking);
+        messagesEl.scrollTop = messagesEl.scrollHeight;
+        try {
+          const res = await fetch('/chat', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ message: text })
+          });
+          const data = await res.json();
+          if (data.ok) {
+            await refreshMessages();
+          } else {
+            thinking.innerText = 'Error: ' + (data.error || 'failed');
+          }
+        } catch (err) {
+          thinking.innerText = 'Request failed.';
+        }
+      });
+
+      // Initial load
+      refreshMessages();
+    </script>
+  </body>
+  </html>
+
