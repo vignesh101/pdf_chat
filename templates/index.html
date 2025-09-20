@@ -9,7 +9,10 @@
   <body>
     <div class="container">
       <header class="header">
-        <h1>Document Chat</h1>
+        <div class="brand">
+          <h1>Document Chat</h1>
+          <span class="tag">RAG</span>
+        </div>
         <div class="config">
           <span>Model: <code>{{ model_name }}</code></span>
           {% if proxy_url %}<span>Proxy: <code>{{ proxy_url }}</code></span>{% endif %}
@@ -18,36 +21,41 @@
         </div>
       </header>
 
-      <section class="uploader" id="uploader">
-        <h2>Upload Files</h2>
-        <form id="upload-form">
-          <div class="dropzone" id="dropzone">
-            <input type="file" id="file" name="file" multiple />
-            <div class="dz-instructions">
-              <strong>Drag & drop</strong> files here or click to browse
-            </div>
-          </div>
-          <button type="submit">Upload</button>
-          <span id="upload-status"></span>
-        </form>
-      </section>
+      <main class="main">
+        <aside class="sidebar">
+          <section class="uploader" id="uploader">
+            <h2>Upload Files</h2>
+            <form id="upload-form">
+              <div class="dropzone" id="dropzone">
+                <input type="file" id="file" name="file" multiple />
+                <div class="dz-instructions">
+                  <strong>Drag & drop</strong> files here or click to browse
+                </div>
+              </div>
+              <button type="submit">Upload</button>
+              <span id="upload-status"></span>
+            </form>
+          </section>
 
-      <section class="chat">
-        <div class="chat-controls">
-          <button id="btn-toggle-history" type="button">Show History</button>
-          <button id="btn-clear" type="button" class="danger">Clear Chat</button>
-          <span id="history-meta" class="muted"></span>
-        </div>
-        <div id="messages" class="messages"></div>
-        <form id="chat-form" class="chat-form">
-          <textarea id="message" rows="1" placeholder="Ask about your documents... (Shift+Enter for newline)" autocomplete="off"></textarea>
-          <button id="btn-send" type="submit">Send</button>
-        </form>
-        <section id="history-panel" class="history" hidden>
-          <header>Chat History</header>
-          <ol id="history-list" class="history-list"></ol>
+          <section id="history-panel" class="history">
+            <header>Chat History</header>
+            <ol id="history-list" class="history-list"></ol>
+          </section>
+        </aside>
+
+        <section class="chat">
+          <div class="chat-controls">
+            <button id="btn-toggle-history" type="button">Show History</button>
+            <button id="btn-clear" type="button" class="danger">Clear Chat</button>
+            <span id="history-meta" class="muted"></span>
+          </div>
+          <div id="messages" class="messages"></div>
+          <form id="chat-form" class="chat-form">
+            <textarea id="message" rows="1" placeholder="Ask about your documents... (Shift+Enter for newline)" autocomplete="off"></textarea>
+            <button id="btn-send" type="submit">Send</button>
+          </form>
         </section>
-      </section>
+      </main>
     </div>
 
     <script>
@@ -270,6 +278,9 @@
         msgInput.style.height = 'auto';
         msgInput.style.height = Math.min(200, msgInput.scrollHeight) + 'px';
       });
+
+      // Initialize toggle button text based on current visibility
+      btnToggleHistory.textContent = historyPanel.hasAttribute('hidden') ? 'Show History' : 'Hide History';
 
       btnToggleHistory.addEventListener('click', () => {
         const isHidden = historyPanel.hasAttribute('hidden');
