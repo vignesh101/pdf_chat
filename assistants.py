@@ -6,6 +6,8 @@ import time
 from typing import Dict, List, Optional
 
 from openai import OpenAI
+from openai import NotFoundError as OpenAINotFoundError  # type: ignore
+from openai import APIStatusError as OpenAIAPIStatusError  # type: ignore
 
 
 STATE_DIR = os.path.join(os.getcwd(), "data")
@@ -34,21 +36,47 @@ def _save_state(state: Dict):
         json.dump(state, f, indent=2)
 
 
-def ensure_vector_store(client: OpenAI, name: str = "Document Chat Vector Store") -> str:
+def ensure_vector_store(
+    client: OpenAI,
+    name: str = "Document Chat Vector Store",
+    embedding_model_name: Optional[str] = None,
+) -> str:
     state = _load_state()
     vs_id = state.get("vector_store_id")
     if vs_id:
         return vs_id
-    vs = client.vector_stores.create(name=name)
+    base_url = getattr(client, "base_url", None) or os.environ.get("OPENAI_BASE_URL") or "https://api.openai.com/v1"
+    try:
+        kwargs = {"name": name}
+        if embedding_model_name:
+            kwargs["embedding_configuration"] = {
+                "type": "model",
+                "model": embedding_model_name,
+            }
+        vs = client.vector_stores.create(**kwargs)
+    except (OpenAINotFoundError, OpenAIAPIStatusError) as e:  # surface clearer guidance
+        # Common cause: using Azure OpenAI or a gateway that doesn't implement Vector Stores/Assistants v2
+        msg = (
+            "Vector Stores API not available at base URL. "
+            f"Tried POST {base_url}/vector_stores and got 404/unsupported. "
+            "Ensure you're using the official OpenAI API (base_url unset or https://api.openai.com/v1) "
+            "with a standard OpenAI API key. Azure OpenAI and some gateways do not support Assistants/Vector Stores."
+        )
+        raise RuntimeError(msg) from e
     state["vector_store_id"] = vs.id
     _save_state(state)
     return vs.id
 
 
-def ensure_assistant(client: OpenAI, model_name: str, instructions: Optional[str] = None) -> str:
+def ensure_assistant(
+    client: OpenAI,
+    model_name: str,
+    instructions: Optional[str] = None,
+    embedding_model_name: Optional[str] = None,
+) -> str:
     state = _load_state()
     assistant_id = state.get("assistant_id")
-    vector_store_id = ensure_vector_store(client)
+    vector_store_id = ensure_vector_store(client, embedding_model_name=embedding_model_name)
 
     if assistant_id:
         # Make sure the assistant is connected to our vector store
@@ -158,4 +186,3 @@ def run_chat_turn(client: OpenAI, assistant_id: str, thread_id: str, user_messag
             "created_at": getattr(m, "created_at", None),
         })
     return formatted
-

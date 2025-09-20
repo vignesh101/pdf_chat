@@ -24,6 +24,7 @@ class AppConfig:
     openai_api_key: Optional[str]
     disable_ssl: bool
     model_name: str
+    embedding_model_name: Optional[str]
     secret_key: Optional[str]
 
 
@@ -41,6 +42,7 @@ def load_config() -> AppConfig:
     openai_api_key = get_cfg('openai_api_key', 'OPENAI_API_KEY', None)
     disable_ssl_raw = get_cfg('disable_ssl', 'DISABLE_SSL', False)
     model_name = get_cfg('model_name', 'MODEL_NAME', 'gpt-4o-mini')
+    embedding_model_name = get_cfg('embedding_model_name', 'EMBEDDING_MODEL_NAME', 'text-embedding-3-small')
     secret_key = os.environ.get('SECRET_KEY')
 
     disable_ssl = False
@@ -55,6 +57,6 @@ def load_config() -> AppConfig:
         openai_api_key=openai_api_key or None,
         disable_ssl=disable_ssl,
         model_name=str(model_name),
+        embedding_model_name=str(embedding_model_name) if embedding_model_name else None,
         secret_key=secret_key,
     )
-

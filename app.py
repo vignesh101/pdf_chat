@@ -25,8 +25,8 @@ def create_app() -> Flask:
     app.config['MODEL_NAME'] = cfg.model_name
 
     # Ensure vector store and assistant exist at startup
-    ensure_vector_store(client)
-    assistant_id = ensure_assistant(client, cfg.model_name)
+    ensure_vector_store(client, embedding_model_name=cfg.embedding_model_name)
+    assistant_id = ensure_assistant(client, cfg.model_name, embedding_model_name=cfg.embedding_model_name)
     app.config['ASSISTANT_ID'] = assistant_id
 
     @app.route('/')
@@ -115,4 +115,3 @@ app = create_app()
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)
-

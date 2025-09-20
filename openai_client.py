@@ -10,7 +10,7 @@ def build_openai_client(cfg: AppConfig) -> OpenAI:
     # Create a dedicated HTTPX client to support proxies and SSL toggle
     http_client = httpx.Client(
         timeout=httpx.Timeout(60.0, connect=30.0, read=60.0, write=60.0),
-        proxies=cfg.proxy_url if cfg.proxy_url else None,
+        proxy=cfg.proxy_url if cfg.proxy_url else None,
         verify=False if cfg.disable_ssl else True,
     )
 

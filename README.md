@@ -19,6 +19,7 @@ Create a `config.toml` at the project root or export environment variables. The 
 - `openai_api_key` (`OPENAI_API_KEY`) — Your OpenAI API key.
 - `disable_ssl` (`DISABLE_SSL`) — Set to `true` to disable SSL verification (use only for trusted setups).
 - `model_name` (`MODEL_NAME`) — The model to use for the Assistant (e.g., `gpt-4o-mini`).
+- `embedding_model_name` (`EMBEDDING_MODEL_NAME`) — Embedding model used when creating the Vector Store (e.g., `text-embedding-3-small` or `text-embedding-3-large`).
 
 An example config is provided in `config.example.toml`.
 
@@ -52,7 +53,7 @@ An example config is provided in `config.example.toml`.
 ## Notes
 
 - This app uses Assistants API v2 with `file_search` and a vector store. First run creates and persists the assistant/vector store IDs under `data/state.json`.
+- The vector store is created with the embedding model from `embedding_model_name`.
 - Files uploaded through the UI are sent to the OpenAI Files API with `purpose="assistants"`.
 - If you use a proxy or custom base URL (e.g., gateways), set them in the config.
 - For production, set a `SECRET_KEY` environment variable for Flask sessions.
-
