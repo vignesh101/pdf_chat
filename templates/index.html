@@ -120,12 +120,21 @@
         </div>
         {% endif %}
 
+        <div class="sub-tabs" style="display:flex; gap:8px; padding: 0 16px 8px 16px; align-items:center;">
+          <button id="tab-docs" class="tab-btn active">Docs</button>
+          <button id="tab-web" class="tab-btn">Web</button>
+        </div>
+
         <div class="chat-container">
-          <div id="messages" class="messages"></div>
+          <div id="messages-docs" class="messages"></div>
+          <div id="messages-web" class="messages" style="display:none;"></div>
           <div class="chat-input-container">
             <form id="chat-form" class="chat-form">
+              <div id="web-extra" class="web-extra" style="display:none; margin: 0 0 6px 0;">
+                <input id="web-urls" type="text" placeholder="Optional: URLs (comma-separated)" style="width:100%; padding:8px 10px; border: 1px solid var(--border-light); border-radius: 8px;" />
+              </div>
               <div class="input-wrapper">
-                <textarea id="message" rows="1" placeholder="Message Document Chat..." autocomplete="off"></textarea>
+                <textarea id="message" rows="1" placeholder="Message..." autocomplete="off"></textarea>
                 <button id="btn-send" type="submit" aria-label="Send message">
                   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <line x1="22" y1="2" x2="11" y2="13"/>
@@ -144,9 +153,13 @@
 
     <script>
       const $ = (sel) => document.querySelector(sel);
-      const messagesEl = $("#messages");
+      let activeTab = 'docs';
+      const messagesDocsEl = $("#messages-docs");
+      const messagesWebEl = $("#messages-web");
       const uploadForm = $("#upload-form");
       const chatForm = $("#chat-form");
+      const webExtra = $("#web-extra");
+      const webUrlsInput = $("#web-urls");
       const uploadStatus = $("#upload-status");
       const dropzone = $("#dropzone");
       const btnClear = $('#btn-clear');
@@ -580,6 +593,10 @@
         }
       }
 
+      function getMessagesEl() {
+        return activeTab === 'docs' ? messagesDocsEl : messagesWebEl;
+      }
+
       function messageElFor(m) {
         const wrap = document.createElement('div');
         wrap.className = 'msg ' + (m.role === 'user' ? 'user' : 'assistant');
@@ -638,10 +655,11 @@
         return wrap;
       }
 
-      function appendMessageObj(m) {
+      function appendMessageObj(m, intoEl) {
         const el = messageElFor(m);
-        messagesEl.appendChild(el);
-        messagesEl.scrollTop = messagesEl.scrollHeight;
+        const target = intoEl || getMessagesEl();
+        target.appendChild(el);
+        target.scrollTop = target.scrollHeight;
       }
 
       function renderHistoryList(messages) {
@@ -699,19 +717,31 @@
         }
       }
 
-      async function refreshMessages() {
+      async function refreshMessagesDocs() {
         try {
           const res = await fetch('/messages');
           const data = await res.json();
           if (!data.ok) return;
-          messagesEl.innerHTML = '';
-          (data.messages || []).forEach(m => appendMessageObj(m));
+          messagesDocsEl.innerHTML = '';
+          (data.messages || []).forEach(m => appendMessageObj(m, messagesDocsEl));
           renderHistoryList(data.messages || []);
-          // also refresh status while we're here
           refreshStatus();
-        } catch (e) {
-          console.error(e);
-        }
+        } catch (e) { console.error(e); }
+      }
+
+      async function refreshMessagesWeb() {
+        try {
+          const res = await fetch('/web/messages');
+          const data = await res.json();
+          if (!data.ok) return;
+          messagesWebEl.innerHTML = '';
+          (data.messages || []).forEach(m => appendMessageObj(m, messagesWebEl));
+        } catch (e) { console.error(e); }
+      }
+
+      async function refreshCurrentMessages() {
+        if (activeTab === 'docs') return refreshMessagesDocs();
+        return refreshMessagesWeb();
       }
 
       let rebuildPoller = null;
@@ -870,10 +900,16 @@
         // Create a real assistant bubble we can live-update during streaming
         const assistantLive = messageElFor({ role: 'assistant', text: 'Thinking…' });
         const assistantBody = assistantLive.querySelector('.body');
-        messagesEl.appendChild(assistantLive);
-        messagesEl.scrollTop = messagesEl.scrollHeight;
+        const targetEl = getMessagesEl();
+        targetEl.appendChild(assistantLive);
+        targetEl.scrollTop = targetEl.scrollHeight;
         try {
-          const res = await fetch('/chat_stream', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ message: text }) });
+          const isDocs = activeTab === 'docs';
+          const urlsRaw = (webUrlsInput ? webUrlsInput.value : '') || '';
+          const urls = urlsRaw ? urlsRaw.split(',').map(s => s.trim()).filter(Boolean) : [];
+          const endpoint = isDocs ? '/chat_stream' : '/webchat_stream';
+          const payload = isDocs ? { message: text } : { message: text, urls };
+          const res = await fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
           if (res.ok && res.body) {
             const reader = res.body.getReader();
             const decoder = new TextDecoder();
@@ -886,12 +922,13 @@
               // Render as markdown-ish HTML as it streams
               assistantBody.innerHTML = mdToHtml(acc);
               applyHighlight(assistantBody);
-              messagesEl.scrollTop = messagesEl.scrollHeight;
+              targetEl.scrollTop = targetEl.scrollHeight;
             }
             // After stream ends, persist the conversation on the server
             let committed = false;
             try {
-              const saveRes = await fetch('/chat/commit', {
+              const commitEndpoint = isDocs ? '/chat/commit' : '/webchat/commit';
+              const saveRes = await fetch(commitEndpoint, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ question: text, answer: acc })
@@ -908,12 +945,12 @@
             }
             // Only refresh from server if commit succeeded; otherwise keep live bubbles
             if (committed) {
-              await refreshMessages();
+              await refreshCurrentMessages();
             }
           } else {
-            const r = await fetch('/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ message: text }) });
+            const r = await fetch(isDocs ? '/chat' : '/webchat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(isDocs ? { message: text } : { message: text, urls }) });
             const dj = await r.json();
-            if (dj.ok) { await refreshMessages(); }
+            if (dj.ok) { await refreshCurrentMessages(); }
             else { assistantBody.textContent = 'Error: ' + (dj.error || 'failed'); }
           }
         } catch (err) {
@@ -952,10 +989,10 @@
         const sure = confirm('Clear chat history for this session?');
         if (!sure) return;
         try {
-          const res = await fetch('/clear', { method: 'POST' });
+          const res = await fetch(activeTab === 'docs' ? '/clear' : '/web/clear', { method: 'POST' });
           const data = await res.json();
           if (data.ok) {
-            await refreshMessages();
+            await refreshCurrentMessages();
           } else {
             alert('Failed to clear: ' + (data.error || 'unknown error'));
           }
@@ -966,10 +1003,10 @@
 
       newChatBtn.addEventListener('click', async () => {
         try {
-          const res = await fetch('/clear', { method: 'POST' });
+          const res = await fetch(activeTab === 'docs' ? '/clear' : '/web/clear', { method: 'POST' });
           const data = await res.json();
           if (data.ok) {
-            await refreshMessages();
+            await refreshCurrentMessages();
           } else {
             alert('Failed to start new chat: ' + (data.error || 'unknown error'));
           }
@@ -978,8 +1015,31 @@
         }
       });
 
+      // Tabs behavior
+      const tabDocs = $('#tab-docs');
+      const tabWeb = $('#tab-web');
+      function setActiveTab(tab) {
+        activeTab = tab;
+        if (tab === 'docs') {
+          tabDocs.classList.add('active');
+          tabWeb.classList.remove('active');
+          messagesDocsEl.style.display = '';
+          messagesWebEl.style.display = 'none';
+          webExtra.style.display = 'none';
+        } else {
+          tabWeb.classList.add('active');
+          tabDocs.classList.remove('active');
+          messagesWebEl.style.display = '';
+          messagesDocsEl.style.display = 'none';
+          webExtra.style.display = '';
+        }
+        refreshCurrentMessages();
+      }
+      tabDocs.addEventListener('click', () => setActiveTab('docs'));
+      tabWeb.addEventListener('click', () => setActiveTab('web'));
+
       // Initial load
-      refreshMessages();
+      refreshMessagesDocs();
       refreshStatus();
       refreshFiles();
 

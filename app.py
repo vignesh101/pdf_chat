@@ -5,7 +5,7 @@ from flask import Flask, render_template, request, jsonify, session
 from typing import Any, Dict, List
 
 from config_loader import load_config
-from openai_client import build_openai_client
+from openai_client import build_openai_client, build_httpx_client
 import embedding_store
 
 
@@ -93,9 +93,11 @@ def create_app() -> Flask:
 
         session['chat_history'] = [clamp_msg(m) for m in (hist[-max_n:])]
 
-    # Build OpenAI client and hold it in app context (may be None if not configured)
+    # Build OpenAI + HTTP clients and hold them in app context (may be None if not configured)
     client = build_openai_client(cfg)
+    http_client = build_httpx_client(cfg)
     app.config['OPENAI_CLIENT'] = client
+    app.config['HTTP_CLIENT'] = http_client
     app.config['MODEL_NAME'] = cfg.model_name
     # Initialize local FAISS embedding store only if client is available
     try:
@@ -109,6 +111,7 @@ def create_app() -> Flask:
     def index():
         # Single mode: Chat with local FAISS RAG
         session.setdefault('chat_history', [])
+        session.setdefault('web_chat_history', [])
         thread_id = None
         return render_template('index.html',
                                model_name=cfg.model_name,
@@ -197,6 +200,192 @@ def create_app() -> Flask:
     def get_messages():
         # Return local history
         return jsonify({'ok': True, 'messages': session.get('chat_history', [])})
+
+    # --- Web Chat: retrieve data from internet and chat ---
+    def _html_to_text(html: str) -> str:
+        import re
+        from html import unescape
+        # Remove script/style
+        html = re.sub(r'<script[\s\S]*?</script>', ' ', html, flags=re.I)
+        html = re.sub(r'<style[\s\S]*?</style>', ' ', html, flags=re.I)
+        # Replace breaks/paragraphs/headings with newlines
+        html = re.sub(r'</?(?:br|p|div|h[1-6]|li|tr|td|th|ul|ol|table)[^>]*>', '\n', html, flags=re.I)
+        # Strip all other tags
+        html = re.sub(r'<[^>]+>', ' ', html)
+        # Unescape entities and normalize whitespace
+        text = unescape(html)
+        text = re.sub(r'\s+', ' ', text)
+        return text.strip()
+
+    def _fetch_urls_text(urls: List[str], limit_bytes: int = 200_000) -> List[Dict[str, Any]]:
+        out: List[Dict[str, Any]] = []
+        http = app.config.get('HTTP_CLIENT')
+        if http is None:
+            return out
+        for u in urls:
+            if not isinstance(u, str):
+                continue
+            url = u.strip()
+            if not url:
+                continue
+            try:
+                r = http.get(url, follow_redirects=True)
+                ctype = (r.headers.get('content-type') or '').lower()
+                if 'text' not in ctype and 'html' not in ctype:
+                    continue
+                content = r.text
+                text = _html_to_text(content)[:limit_bytes]
+                title = None
+                try:
+                    import re as _re
+                    m = _re.search(r'<title[^>]*>(.*?)</title>', r.text, flags=_re.I|_re.S)
+                    if m:
+                        title = (m.group(1) or '').strip()
+                except Exception:
+                    pass
+                out.append({'url': url, 'title': title, 'text': text})
+            except Exception:
+                # Skip failures but continue others
+                pass
+        return out
+
+    def _extract_urls_from_text(s: str) -> List[str]:
+        import re
+        urls = re.findall(r'(https?://[^\s]+)', s)
+        # Basic cleanup for trailing punctuation
+        cleaned = []
+        for u in urls:
+            cleaned.append(u.rstrip(').,;\'\"]'))
+        return cleaned
+
+    @app.post('/webchat')
+    def webchat():
+        data = request.get_json(silent=True) or {}
+        message = (data.get('message') or '').strip()
+        extra_urls = data.get('urls') or []
+        if not message and not extra_urls:
+            return jsonify({'ok': False, 'error': 'Empty message'}), 400
+        urls = list(dict.fromkeys((_extract_urls_from_text(message) + [u for u in extra_urls if isinstance(u, str)])))[:5]
+
+        # Fetch web context
+        web_snippets = _fetch_urls_text(urls)
+        context_text = "\n\n".join([
+            f"[Web {i+1}] {it.get('title') or it['url']}\n{it['text']}"
+            for i, it in enumerate(web_snippets)
+        ])
+        system_prompt = (
+            "You are a helpful assistant with access to web page excerpts. "
+            "Use the provided web content to answer accurately. If the answer isn't present, say you aren't sure.\n\n"
+            + (f"Web Content:\n{context_text}" if context_text else "No web content available.")
+        )
+        client = app.config.get('OPENAI_CLIENT')
+        if client is None:
+            return jsonify({'ok': False, 'error': 'OpenAI client not configured. Set OPENAI_API_KEY or update config.toml.'}), 500
+        try:
+            resp = client.chat.completions.create(
+                model=cfg.model_name,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": message},
+                ],
+            )
+            answer = resp.choices[0].message.content if resp and resp.choices else ""
+        except Exception as e:
+            return jsonify({'ok': False, 'error': str(e)}), 500
+
+        # Update web history
+        hist = session.get('web_chat_history', [])
+        hist.append({'id': f'user-{len(hist)+1}', 'role': 'user', 'text': message})
+        hist.append({
+            'id': f'assistant-{len(hist)+1}',
+            'role': 'assistant',
+            'text': answer,
+            'sources': [{'file_id': it.get('url'), 'file_name': it.get('title') or it.get('url'), 'score': None, 'text': it.get('text', '')[:app.config.get('MAX_SOURCE_PREVIEW', 300)]} for it in web_snippets],
+        })
+        session['web_chat_history'] = hist
+        return jsonify({'ok': True, 'messages': session.get('web_chat_history', [])})
+
+    @app.post('/webchat_stream')
+    def webchat_stream():
+        from flask import Response, stream_with_context
+        data = request.get_json(silent=True) or {}
+        message = (data.get('message') or '').strip()
+        extra_urls = data.get('urls') or []
+        if not message and not extra_urls:
+            return jsonify({'ok': False, 'error': 'Empty message'}), 400
+        urls = list(dict.fromkeys((_extract_urls_from_text(message) + [u for u in extra_urls if isinstance(u, str)])))[:5]
+
+        web_snippets = _fetch_urls_text(urls)
+        context_text = "\n\n".join([
+            f"[Web {i+1}] {it.get('title') or it['url']}\n{it['text']}"
+            for i, it in enumerate(web_snippets)
+        ])
+        system_prompt = (
+            "You are a helpful assistant with access to web page excerpts. "
+            "Use the provided web content to answer accurately. If the answer isn't present, say you aren't sure.\n\n"
+            + (f"Web Content:\n{context_text}" if context_text else "No web content available.")
+        )
+        client = app.config.get('OPENAI_CLIENT')
+        if client is None:
+            return jsonify({'ok': False, 'error': 'OpenAI client not configured. Set OPENAI_API_KEY or update config.toml.'}), 500
+
+        try:
+            session['pending_web_assistant'] = {
+                'sources': [{'file_id': it.get('url'), 'file_name': it.get('title') or it.get('url'), 'score': None, 'text': it.get('text', '')[:app.config.get('MAX_SOURCE_PREVIEW', 300)]} for it in web_snippets],
+            }
+        except Exception:
+            pass
+
+        def generate():
+            try:
+                stream = client.chat.completions.create(
+                    model=cfg.model_name,
+                    messages=[
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": message},
+                    ],
+                    stream=True,
+                )
+                for chunk in stream:
+                    try:
+                        delta = chunk.choices[0].delta
+                        content = getattr(delta, 'content', None) if delta is not None else None
+                    except Exception:
+                        content = None
+                    if content:
+                        yield content
+            except Exception as e:
+                yield f"\n[ERROR] {str(e)}"
+
+        return Response(stream_with_context(generate()), mimetype='text/plain; charset=utf-8')
+
+    @app.post('/webchat/commit')
+    def webchat_commit():
+        data = request.get_json(silent=True) or {}
+        question = (data.get('question') or '').strip()
+        answer = (data.get('answer') or '').strip()
+        if not question or not answer:
+            return jsonify({'ok': False, 'error': 'question and answer required'}), 400
+        try:
+            hist = session.get('web_chat_history', [])
+            pending = session.get('pending_web_assistant') or {}
+            sources = pending.get('sources') or []
+            hist.append({'id': f'user-{len(hist)+1}', 'role': 'user', 'text': question})
+            hist.append({'id': f'assistant-{len(hist)+1}', 'role': 'assistant', 'text': answer, 'sources': sources})
+            session['web_chat_history'] = hist
+            session.pop('pending_web_assistant', None)
+            return jsonify({'ok': True, 'messages': session.get('web_chat_history', [])})
+        except Exception as e:
+            return jsonify({'ok': False, 'error': str(e)}), 500
+
+    @app.get('/web/messages')
+    def web_get_messages():
+        return jsonify({'ok': True, 'messages': session.get('web_chat_history', [])})
+
+    @app.post('/web/clear')
+    def web_clear_messages():
+        session['web_chat_history'] = []
+        return jsonify({'ok': True, 'messages': []})
 
     @app.post('/chat_stream')
     def chat_stream():
