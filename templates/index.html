@@ -18,10 +18,15 @@
         </div>
       </header>
 
-      <section class="uploader">
+      <section class="uploader" id="uploader">
         <h2>Upload Files</h2>
         <form id="upload-form">
-          <input type="file" id="file" name="file" multiple />
+          <div class="dropzone" id="dropzone">
+            <input type="file" id="file" name="file" multiple />
+            <div class="dz-instructions">
+              <strong>Drag & drop</strong> files here or click to browse
+            </div>
+          </div>
           <button type="submit">Upload</button>
           <span id="upload-status"></span>
         </form>
@@ -35,8 +40,8 @@
         </div>
         <div id="messages" class="messages"></div>
         <form id="chat-form" class="chat-form">
-          <input type="text" id="message" placeholder="Ask about your documents..." autocomplete="off" />
-          <button type="submit">Send</button>
+          <textarea id="message" rows="1" placeholder="Ask about your documents... (Shift+Enter for newline)" autocomplete="off"></textarea>
+          <button id="btn-send" type="submit">Send</button>
         </form>
         <section id="history-panel" class="history" hidden>
           <header>Chat History</header>
@@ -51,17 +56,91 @@
       const uploadForm = $("#upload-form");
       const chatForm = $("#chat-form");
       const uploadStatus = $("#upload-status");
+      const dropzone = $("#dropzone");
       const btnToggleHistory = $('#btn-toggle-history');
       const btnClear = $('#btn-clear');
       const historyPanel = $('#history-panel');
       const historyList = $('#history-list');
       const historyMeta = $('#history-meta');
+      const btnSend = $('#btn-send');
 
-      function appendMessage(role, text) {
-        const div = document.createElement('div');
-        div.className = 'msg ' + (role === 'user' ? 'user' : 'assistant');
-        div.innerText = text;
-        messagesEl.appendChild(div);
+      function escapeHtml(str) {
+        const map = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
+        return (str || '').replace(/[&<>"']/g, (ch) => map[ch]);
+      }
+
+      function mdToHtml(text) {
+        if (!text) return '';
+        let html = escapeHtml(text);
+        html = html.replace(/```([a-zA-Z0-9_-]+)?\n([\s\S]*?)```/g, (_, lang, code) => {
+          return `<pre class="code-block"><code class="lang-${lang || 'text'}">${code.replace(/\n$/, '')}</code></pre>`;
+        });
+        html = html.replace(/`([^`]+)`/g, '<code class="inline-code">$1</code>');
+        html = html.replace(/(https?:\/\/[\w.-]+(?:\/[\w\-._~:/?#[\]@!$&'()*+,;=.]+)?)/g, '<a href="$1" target="_blank" rel="noopener">$1</a>');
+        html = html.replace(/\n\n+/g, '</p><p>').replace(/\n/g, '<br/>');
+        return `<p>${html}</p>`;
+      }
+
+      function messageElFor(m) {
+        const wrap = document.createElement('div');
+        wrap.className = 'msg ' + (m.role === 'user' ? 'user' : 'assistant');
+        const row = document.createElement('div');
+        row.className = 'msg-row';
+        const avatar = document.createElement('div');
+        avatar.className = 'avatar';
+        avatar.textContent = m.role === 'user' ? 'You' : 'AI';
+        const bubble = document.createElement('div');
+        bubble.className = 'bubble';
+        const body = document.createElement('div');
+        body.className = 'body';
+        body.innerHTML = mdToHtml(m.text || '');
+        const tools = document.createElement('div');
+        tools.className = 'tools';
+        const copyBtn = document.createElement('button');
+        copyBtn.type = 'button';
+        copyBtn.className = 'tool copy';
+        copyBtn.textContent = 'Copy';
+        copyBtn.addEventListener('click', async (e) => {
+          e.stopPropagation();
+          try { await navigator.clipboard.writeText(m.text || ''); copyBtn.textContent = 'Copied!'; setTimeout(()=> copyBtn.textContent = 'Copy', 1200); } catch (_) {}
+        });
+        tools.appendChild(copyBtn);
+        bubble.appendChild(body);
+        bubble.appendChild(tools);
+        if (m.role !== 'user' && Array.isArray(m.sources) && m.sources.length) {
+          const details = document.createElement('details');
+          details.className = 'sources';
+          const summary = document.createElement('summary');
+          summary.textContent = `Sources (${m.sources.length})`;
+          details.appendChild(summary);
+          const list = document.createElement('ol');
+          list.className = 'sources-list';
+          m.sources.forEach((s) => {
+            const li = document.createElement('li');
+            li.className = 'source-item';
+            const meta = document.createElement('div');
+            meta.className = 'meta';
+            const file = s.file_name ? s.file_name : (s.file_id || 'local');
+            meta.textContent = `${file}  •  score: ${typeof s.score === 'number' ? s.score.toFixed(3) : s.score}`;
+            const preview = document.createElement('div');
+            preview.className = 'preview';
+            preview.textContent = (s.text || '').slice(0, 500);
+            li.appendChild(meta);
+            li.appendChild(preview);
+            list.appendChild(li);
+          });
+          details.appendChild(list);
+          bubble.appendChild(details);
+        }
+        row.appendChild(avatar);
+        row.appendChild(bubble);
+        wrap.appendChild(row);
+        return wrap;
+      }
+
+      function appendMessageObj(m) {
+        const el = messageElFor(m);
+        messagesEl.appendChild(el);
         messagesEl.scrollTop = messagesEl.scrollHeight;
       }
 
@@ -91,22 +170,54 @@
           const data = await res.json();
           if (!data.ok) return;
           messagesEl.innerHTML = '';
-          (data.messages || []).forEach(m => appendMessage(m.role, m.text || ''));
+          (data.messages || []).forEach(m => appendMessageObj(m));
           renderHistoryList(data.messages || []);
         } catch (e) {
           console.error(e);
         }
       }
 
+      // Drag & drop uploads
+      let droppedFiles = [];
+      const dropEvents = ['dragenter','dragover','dragleave','drop'];
+      dropEvents.forEach(evt => dropzone.addEventListener(evt, (e) => { e.preventDefault(); e.stopPropagation(); }));
+      ;['dragenter','dragover'].forEach(evt => dropzone.addEventListener(evt, () => dropzone.classList.add('dragging')));
+      ;['dragleave','drop'].forEach(evt => dropzone.addEventListener(evt, () => dropzone.classList.remove('dragging')));
+      dropzone.addEventListener('drop', (e) => {
+        const files = Array.from(e.dataTransfer.files || []);
+        if (files.length) {
+          droppedFiles = droppedFiles.concat(files);
+          uploadStatus.textContent = `${droppedFiles.length} file(s) ready`;
+        }
+      });
+      dropzone.addEventListener('click', () => {
+        $('#file').click();
+      });
+      $('#file').addEventListener('change', (e) => {
+        const files = Array.from(e.target.files || []);
+        if (files.length) {
+          droppedFiles = droppedFiles.concat(files);
+          uploadStatus.textContent = `${droppedFiles.length} file(s) ready`;
+          e.target.value = '';
+        }
+      });
+
       uploadForm.addEventListener('submit', async (e) => {
         e.preventDefault();
-        const fd = new FormData(uploadForm);
+        const fd = new FormData();
+        const toSend = droppedFiles;
+        if (!toSend.length) {
+          uploadStatus.textContent = 'No files selected.';
+          return;
+        }
+        toSend.forEach(f => fd.append('file', f, f.name));
         uploadStatus.textContent = 'Uploading...';
         try {
           const res = await fetch('/upload', { method: 'POST', body: fd });
           const data = await res.json();
           if (data.ok) {
             uploadStatus.textContent = `Uploaded ${data.file_ids.length} file(s)`;
+            droppedFiles = [];
           } else {
             uploadStatus.textContent = `Error: ${data.error || 'upload failed'}`;
           }
@@ -120,8 +231,9 @@
         const input = $("#message");
         const text = input.value.trim();
         if (!text) return;
-        appendMessage('user', text);
+        appendMessageObj({ role: 'user', text });
         input.value = '';
+        btnSend.disabled = true;
         const thinking = document.createElement('div');
         thinking.className = 'msg assistant thinking';
         thinking.innerText = 'Thinking…';
@@ -141,7 +253,22 @@
           }
         } catch (err) {
           thinking.innerText = 'Request failed.';
+        } finally {
+          btnSend.disabled = false;
         }
+      });
+
+      // Shift+Enter for newline, Enter to send; auto-resize
+      const msgInput = $("#message");
+      msgInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' && !e.shiftKey) {
+          e.preventDefault();
+          chatForm.requestSubmit();
+        }
+      });
+      msgInput.addEventListener('input', () => {
+        msgInput.style.height = 'auto';
+        msgInput.style.height = Math.min(200, msgInput.scrollHeight) + 'px';
       });
 
       btnToggleHistory.addEventListener('click', () => {

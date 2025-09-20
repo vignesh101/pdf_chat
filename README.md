@@ -1,6 +1,6 @@
 # Document Chat (Embeddings + FAISS)
 
-A simple Python web app to upload documents and chat with them using OpenAI Embeddings for retrieval and a local FAISS vector index. Includes a minimal yet polished chat UI and a flexible config supporting custom proxies and base URLs.
+A simple Python web app to upload documents and chat with them using OpenAI Embeddings for retrieval and a local FAISS vector index. Includes a clean, responsive chat UI (bubbles, markdown, copy-to-clipboard, sources panel) and a flexible config supporting custom proxies and base URLs.
 
 ## Features
 
@@ -8,6 +8,8 @@ A simple Python web app to upload documents and chat with them using OpenAI Embe
 - PDF ingestion locally (requires `pypdf` or `PyPDF2`)
 - Retrieve top matching chunks via embeddings similarity
 - Chat with grounded answers using retrieved snippets
+- Sources panel under replies with snippet previews and scores
+- Drag & drop uploads and copy-to-clipboard for messages
 - Configurable via `config.toml` and environment variables
 - Optional HTTP proxy and SSL verification toggle
 

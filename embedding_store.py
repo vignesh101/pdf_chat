@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import os
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple, Any
 
 import numpy as np
 
@@ -190,3 +190,35 @@ def search(query: str, k: int = 5) -> List[Tuple[str, float]]:
         except Exception:
             continue
     return results
+
+
+def search_with_meta(query: str, k: int = 5) -> List[Dict[str, Any]]:
+    """Return top-k chunk dicts: {text, score, file_name, file_id, chunk_id}.
+
+    Does not modify the store. Uses the same FAISS search as `search` but
+    includes metadata for UI display (e.g., sources panel).
+    """
+    if not query.strip():
+        return []
+    if _INDEX is None or (_META.get("chunks") is None or len(_META.get("chunks")) == 0):
+        return []
+    q = _embed_texts([query])
+    D, I = _INDEX.search(q, min(k, len(_META["chunks"])) )
+    idxs = I[0]
+    scores = D[0]
+    out: List[Dict[str, Any]] = []
+    for pos, score in zip(idxs, scores):
+        if pos < 0:
+            continue
+        try:
+            ch = _META["chunks"][int(pos)]
+            out.append({
+                "chunk_id": ch.get("id"),
+                "file_name": ch.get("file_name"),
+                "file_id": ch.get("file_id"),
+                "text": ch.get("text", ""),
+                "score": float(score),
+            })
+        except Exception:
+            continue
+    return out

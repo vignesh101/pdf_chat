@@ -66,8 +66,8 @@ def create_app() -> Flask:
             return jsonify({'ok': False, 'error': 'Empty message'}), 400
         # Retrieve context locally (embeddings + FAISS) and call Chat Completions
         k_ctx = 5
-        ctx_chunks = embedding_store.search(message, k=k_ctx)
-        context_text = "\n\n".join([f"[Snippet {i+1}]\n{t}" for i, (t, _) in enumerate(ctx_chunks)])
+        ctx_chunks_meta = embedding_store.search_with_meta(message, k=k_ctx)
+        context_text = "\n\n".join([f"[Snippet {i+1}]\n{it['text']}" for i, it in enumerate(ctx_chunks_meta)])
         system_prompt = (
             "You are a helpful assistant. Use the provided snippets to answer. "
             "If the answer isn't in the snippets, say you aren't sure.\n\n"
@@ -88,7 +88,12 @@ def create_app() -> Flask:
         # Update local history
         hist = session.get('chat_history', [])
         hist.append({'id': f'user-{len(hist)+1}', 'role': 'user', 'text': message})
-        hist.append({'id': f'assistant-{len(hist)+1}', 'role': 'assistant', 'text': answer})
+        hist.append({
+            'id': f'assistant-{len(hist)+1}',
+            'role': 'assistant',
+            'text': answer,
+            'sources': ctx_chunks_meta,
+        })
         # keep last 50
         session['chat_history'] = hist[-50:]
         return jsonify({'ok': True, 'messages': session['chat_history']})
