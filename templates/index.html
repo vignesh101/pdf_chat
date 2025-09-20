@@ -130,9 +130,6 @@
           <div id="messages-web" class="messages" style="display:none;"></div>
           <div class="chat-input-container">
             <form id="chat-form" class="chat-form">
-              <div id="web-extra" class="web-extra" style="display:none; margin: 0 0 6px 0;">
-                <input id="web-urls" type="text" placeholder="Optional: URLs (comma-separated)" style="width:100%; padding:8px 10px; border: 1px solid var(--border-light); border-radius: 8px;" />
-              </div>
               <div class="input-wrapper">
                 <textarea id="message" rows="1" placeholder="Message..." autocomplete="off"></textarea>
                 <button id="btn-send" type="submit" aria-label="Send message">
@@ -158,8 +155,7 @@
       const messagesWebEl = $("#messages-web");
       const uploadForm = $("#upload-form");
       const chatForm = $("#chat-form");
-      const webExtra = $("#web-extra");
-      const webUrlsInput = $("#web-urls");
+      // Web extra input removed (DDG search used instead)
       const uploadStatus = $("#upload-status");
       const dropzone = $("#dropzone");
       const btnClear = $('#btn-clear');
@@ -905,10 +901,8 @@
         targetEl.scrollTop = targetEl.scrollHeight;
         try {
           const isDocs = activeTab === 'docs';
-          const urlsRaw = (webUrlsInput ? webUrlsInput.value : '') || '';
-          const urls = urlsRaw ? urlsRaw.split(',').map(s => s.trim()).filter(Boolean) : [];
           const endpoint = isDocs ? '/chat_stream' : '/webchat_stream';
-          const payload = isDocs ? { message: text } : { message: text, urls };
+          const payload = { message: text };
           const res = await fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
           if (res.ok && res.body) {
             const reader = res.body.getReader();
@@ -948,7 +942,7 @@
               await refreshCurrentMessages();
             }
           } else {
-            const r = await fetch(isDocs ? '/chat' : '/webchat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(isDocs ? { message: text } : { message: text, urls }) });
+            const r = await fetch(isDocs ? '/chat' : '/webchat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ message: text }) });
             const dj = await r.json();
             if (dj.ok) { await refreshCurrentMessages(); }
             else { assistantBody.textContent = 'Error: ' + (dj.error || 'failed'); }
@@ -1025,13 +1019,11 @@
           tabWeb.classList.remove('active');
           messagesDocsEl.style.display = '';
           messagesWebEl.style.display = 'none';
-          webExtra.style.display = 'none';
         } else {
           tabWeb.classList.add('active');
           tabDocs.classList.remove('active');
           messagesWebEl.style.display = '';
           messagesDocsEl.style.display = 'none';
-          webExtra.style.display = '';
         }
         refreshCurrentMessages();
       }

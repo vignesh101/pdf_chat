@@ -7,6 +7,7 @@ from typing import Any, Dict, List
 from config_loader import load_config
 from openai_client import build_openai_client, build_httpx_client
 import embedding_store
+import web_embedding_store as web_store
 
 
 def create_app() -> Flask:
@@ -103,6 +104,8 @@ def create_app() -> Flask:
     try:
         if client is not None:
             embedding_store.init(client, embedding_model_name=cfg.embedding_model_name)
+            # Initialize separate FAISS store for Web chat
+            web_store.init(client, embedding_model_name=cfg.embedding_model_name)
     except Exception:
         # Do not block app startup; search/upload will surface errors
         pass
@@ -249,6 +252,60 @@ def create_app() -> Flask:
                 pass
         return out
 
+    def _ddg_search(query: str, max_results: int = 5) -> List[Dict[str, str]]:
+        """DuckDuckGo search using duckduckgo_search (ddgs). Honors proxy and SSL settings.
+
+        Returns list of {url,title}.
+        """
+        results: List[Dict[str, str]] = []
+        try:
+            from duckduckgo_search import DDGS  # type: ignore
+        except Exception:
+            return results
+        # Prepare kwargs with proxy and SSL behavior if supported
+        kwargs: Dict[str, Any] = {
+            'timeout': 30.0,
+            'headers': {'User-Agent': 'document-chat/1.0 (+https://localhost)'},
+        }
+        if getattr(cfg, 'proxy_url', None):
+            # DDGS expects requests/httpx-style proxies value (str or dict)
+            kwargs['proxy'] = cfg.proxy_url
+        # Some ddgs versions accept 'verify'; try it first, then fallback
+        try:
+            if getattr(cfg, 'disable_ssl', False):
+                kwargs_with_verify = dict(kwargs)
+                kwargs_with_verify['verify'] = False
+            else:
+                kwargs_with_verify = dict(kwargs)
+
+            with DDGS(**kwargs_with_verify) as ddgs:
+                for item in ddgs.text(query, region="wt-wt", safesearch="moderate", timelimit=None, max_results=max_results):
+                    try:
+                        url = (item.get('href') or '').strip()
+                        title = (item.get('title') or '').strip()
+                        if url:
+                            results.append({'url': url, 'title': title})
+                    except Exception:
+                        continue
+        except TypeError:
+            # 'verify' not supported by this ddgs version; retry without it
+            try:
+                with DDGS(**kwargs) as ddgs:
+                    for item in ddgs.text(query, region="wt-wt", safesearch="moderate", timelimit=None, max_results=max_results):
+                        try:
+                            url = (item.get('href') or '').strip()
+                            title = (item.get('title') or '').strip()
+                            if url:
+                                results.append({'url': url, 'title': title})
+                        except Exception:
+                            continue
+            except Exception:
+                pass
+        except Exception:
+            # Any other runtime failure -> no results
+            pass
+        return results
+
     def _extract_urls_from_text(s: str) -> List[str]:
         import re
         urls = re.findall(r'(https?://[^\s]+)', s)
@@ -262,16 +319,31 @@ def create_app() -> Flask:
     def webchat():
         data = request.get_json(silent=True) or {}
         message = (data.get('message') or '').strip()
-        extra_urls = data.get('urls') or []
-        if not message and not extra_urls:
+        if not message:
             return jsonify({'ok': False, 'error': 'Empty message'}), 400
-        urls = list(dict.fromkeys((_extract_urls_from_text(message) + [u for u in extra_urls if isinstance(u, str)])))[:5]
 
-        # Fetch web context
-        web_snippets = _fetch_urls_text(urls)
+        # Build candidate URLs via DDG + any URLs present in the message
+        ddg_hits = _ddg_search(message, max_results=5)
+        ddg_urls = [h.get('url') for h in ddg_hits if isinstance(h.get('url'), str)]
+        urls = list(dict.fromkeys((_extract_urls_from_text(message) + ddg_urls)))[:5]
+
+        # Fetch pages and index into web-only FAISS store
+        web_pages = _fetch_urls_text(urls)
+        try:
+            for wp in web_pages:
+                web_store.add_page(wp.get('url') or '', wp.get('title'), wp.get('text') or '')
+        except Exception:
+            pass
+
+        # Retrieve best context from web index
+        k_ctx = 5
+        try:
+            ctx_chunks_meta = web_store.search_with_meta(message, k=k_ctx)
+        except Exception:
+            ctx_chunks_meta = []
         context_text = "\n\n".join([
-            f"[Web {i+1}] {it.get('title') or it['url']}\n{it['text']}"
-            for i, it in enumerate(web_snippets)
+            f"[Web {i+1}] {it.get('file_name') or it.get('file_id')}\n{it.get('text', '')}"
+            for i, it in enumerate(ctx_chunks_meta)
         ])
         system_prompt = (
             "You are a helpful assistant with access to web page excerpts. "
@@ -300,7 +372,15 @@ def create_app() -> Flask:
             'id': f'assistant-{len(hist)+1}',
             'role': 'assistant',
             'text': answer,
-            'sources': [{'file_id': it.get('url'), 'file_name': it.get('title') or it.get('url'), 'score': None, 'text': it.get('text', '')[:app.config.get('MAX_SOURCE_PREVIEW', 300)]} for it in web_snippets],
+            'sources': [
+                {
+                    'file_id': it.get('file_id'),
+                    'file_name': it.get('file_name'),
+                    'score': it.get('score'),
+                    'text': (it.get('text') or '')[:app.config.get('MAX_SOURCE_PREVIEW', 300)],
+                }
+                for it in ctx_chunks_meta
+            ],
         })
         session['web_chat_history'] = hist
         return jsonify({'ok': True, 'messages': session.get('web_chat_history', [])})
@@ -310,15 +390,28 @@ def create_app() -> Flask:
         from flask import Response, stream_with_context
         data = request.get_json(silent=True) or {}
         message = (data.get('message') or '').strip()
-        extra_urls = data.get('urls') or []
-        if not message and not extra_urls:
+        if not message:
             return jsonify({'ok': False, 'error': 'Empty message'}), 400
-        urls = list(dict.fromkeys((_extract_urls_from_text(message) + [u for u in extra_urls if isinstance(u, str)])))[:5]
 
-        web_snippets = _fetch_urls_text(urls)
+        ddg_hits = _ddg_search(message, max_results=5)
+        ddg_urls = [h.get('url') for h in ddg_hits if isinstance(h.get('url'), str)]
+        urls = list(dict.fromkeys((_extract_urls_from_text(message) + ddg_urls)))[:5]
+
+        web_pages = _fetch_urls_text(urls)
+        try:
+            for wp in web_pages:
+                web_store.add_page(wp.get('url') or '', wp.get('title'), wp.get('text') or '')
+        except Exception:
+            pass
+
+        k_ctx = 5
+        try:
+            ctx_chunks_meta = web_store.search_with_meta(message, k=k_ctx)
+        except Exception:
+            ctx_chunks_meta = []
         context_text = "\n\n".join([
-            f"[Web {i+1}] {it.get('title') or it['url']}\n{it['text']}"
-            for i, it in enumerate(web_snippets)
+            f"[Web {i+1}] {it.get('file_name') or it.get('file_id')}\n{it.get('text', '')}"
+            for i, it in enumerate(ctx_chunks_meta)
         ])
         system_prompt = (
             "You are a helpful assistant with access to web page excerpts. "
@@ -331,7 +424,15 @@ def create_app() -> Flask:
 
         try:
             session['pending_web_assistant'] = {
-                'sources': [{'file_id': it.get('url'), 'file_name': it.get('title') or it.get('url'), 'score': None, 'text': it.get('text', '')[:app.config.get('MAX_SOURCE_PREVIEW', 300)]} for it in web_snippets],
+                'sources': [
+                    {
+                        'file_id': it.get('file_id'),
+                        'file_name': it.get('file_name'),
+                        'score': it.get('score'),
+                        'text': (it.get('text') or '')[:app.config.get('MAX_SOURCE_PREVIEW', 300)],
+                    }
+                    for it in ctx_chunks_meta
+                ],
             }
         except Exception:
             pass
