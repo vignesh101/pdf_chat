@@ -66,7 +66,11 @@ def create_app() -> Flask:
             return jsonify({'ok': False, 'error': 'Empty message'}), 400
         # Retrieve context locally (embeddings + FAISS) and call Chat Completions
         k_ctx = 5
-        ctx_chunks_meta = embedding_store.search_with_meta(message, k=k_ctx)
+        try:
+            ctx_chunks_meta = embedding_store.search_with_meta(message, k=k_ctx)
+        except Exception as e:
+            # If vector search fails (e.g., embeddings unavailable), continue without context
+            ctx_chunks_meta = []
         context_text = "\n\n".join([f"[Snippet {i+1}]\n{it['text']}" for i, it in enumerate(ctx_chunks_meta)])
         system_prompt = (
             "You are a helpful assistant. Use the provided snippets to answer. "

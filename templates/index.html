@@ -239,9 +239,15 @@
       }
 
       // Sidebar toggle functionality
+      function isMobile() { return window.innerWidth <= 768; }
       function toggleSidebar() {
         sidebar.classList.toggle('collapsed');
-        sidebarBackdrop.classList.toggle('active');
+        if (isMobile()) {
+          sidebarBackdrop.classList.toggle('active');
+        } else {
+          // Ensure backdrop never blocks desktop UI
+          sidebarBackdrop.classList.remove('active');
+        }
       }
 
       function closeSidebar() {
@@ -251,7 +257,9 @@
 
       function openSidebar() {
         sidebar.classList.remove('collapsed');
-        sidebarBackdrop.classList.add('active');
+        if (isMobile()) {
+          sidebarBackdrop.classList.add('active');
+        }
       }
 
       async function refreshMessages() {

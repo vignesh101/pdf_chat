@@ -51,6 +51,7 @@ html, body {
 /* Sidebar */
 .sidebar {
   width: var(--sidebar-width);
+  flex: 0 0 var(--sidebar-width);
   background: var(--bg-sidebar);
   color: var(--text-light);
   display: flex;
@@ -61,8 +62,12 @@ html, body {
   position: relative;
 }
 
+/* Desktop collapse: remove width so main expands */
 .sidebar.collapsed {
-  transform: translateX(-100%);
+  width: 0;
+  flex-basis: 0;
+  border-right: none;
+  overflow: hidden;
 }
 
 .sidebar-header {
@@ -629,6 +634,14 @@ html, body {
   opacity: 1;
 }
 
+/* Prevent backdrop from blocking UI on desktop */
+@media (min-width: 769px) {
+  .sidebar-backdrop.active {
+    display: none !important;
+    opacity: 0 !important;
+  }
+}
+
 /* Responsive Design */
 @media (max-width: 768px) {
   .sidebar {
@@ -641,6 +654,9 @@ html, body {
 
   .sidebar.collapsed {
     transform: translateX(-100%);
+    /* keep natural width on mobile overlay */
+    width: var(--sidebar-width);
+    flex-basis: var(--sidebar-width);
   }
 
   .main-content {
