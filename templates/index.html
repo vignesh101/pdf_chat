@@ -28,11 +28,20 @@
       </section>
 
       <section class="chat">
+        <div class="chat-controls">
+          <button id="btn-toggle-history" type="button">Show History</button>
+          <button id="btn-clear" type="button" class="danger">Clear Chat</button>
+          <span id="history-meta" class="muted"></span>
+        </div>
         <div id="messages" class="messages"></div>
         <form id="chat-form" class="chat-form">
           <input type="text" id="message" placeholder="Ask about your documents..." autocomplete="off" />
           <button type="submit">Send</button>
         </form>
+        <section id="history-panel" class="history" hidden>
+          <header>Chat History</header>
+          <ol id="history-list" class="history-list"></ol>
+        </section>
       </section>
     </div>
 
@@ -42,6 +51,11 @@
       const uploadForm = $("#upload-form");
       const chatForm = $("#chat-form");
       const uploadStatus = $("#upload-status");
+      const btnToggleHistory = $('#btn-toggle-history');
+      const btnClear = $('#btn-clear');
+      const historyPanel = $('#history-panel');
+      const historyList = $('#history-list');
+      const historyMeta = $('#history-meta');
 
       function appendMessage(role, text) {
         const div = document.createElement('div');
@@ -51,6 +65,26 @@
         messagesEl.scrollTop = messagesEl.scrollHeight;
       }
 
+      function renderHistoryList(messages) {
+        if (!Array.isArray(messages)) messages = [];
+        historyList.innerHTML = '';
+        messages.forEach((m) => {
+          const li = document.createElement('li');
+          li.className = 'history-item ' + (m.role || '');
+          const role = document.createElement('span');
+          role.className = 'role';
+          role.textContent = (m.role || '').toUpperCase();
+          const text = document.createElement('span');
+          text.className = 'preview';
+          text.textContent = m.text || '';
+          li.appendChild(role);
+          li.appendChild(text);
+          historyList.appendChild(li);
+        });
+        const count = messages.length || 0;
+        historyMeta.textContent = `${count} message${count === 1 ? '' : 's'}`;
+      }
+
       async function refreshMessages() {
         try {
           const res = await fetch('/messages');
@@ -58,6 +92,7 @@
           if (!data.ok) return;
           messagesEl.innerHTML = '';
           (data.messages || []).forEach(m => appendMessage(m.role, m.text || ''));
+          renderHistoryList(data.messages || []);
         } catch (e) {
           console.error(e);
         }
@@ -109,9 +144,35 @@
         }
       });
 
+      btnToggleHistory.addEventListener('click', () => {
+        const isHidden = historyPanel.hasAttribute('hidden');
+        if (isHidden) {
+          historyPanel.removeAttribute('hidden');
+          btnToggleHistory.textContent = 'Hide History';
+        } else {
+          historyPanel.setAttribute('hidden', '');
+          btnToggleHistory.textContent = 'Show History';
+        }
+      });
+
+      btnClear.addEventListener('click', async () => {
+        const sure = confirm('Clear chat history for this session?');
+        if (!sure) return;
+        try {
+          const res = await fetch('/clear', { method: 'POST' });
+          const data = await res.json();
+          if (data.ok) {
+            await refreshMessages();
+          } else {
+            alert('Failed to clear: ' + (data.error || 'unknown error'));
+          }
+        } catch (e) {
+          alert('Request failed while clearing.');
+        }
+      });
+
       // Initial load
       refreshMessages();
     </script>
   </body>
   </html>
-

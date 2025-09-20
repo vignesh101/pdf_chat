@@ -36,3 +36,16 @@ body { margin: 0; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI
 .chat-form input { flex: 1; padding: 10px 12px; border-radius: 8px; border: 1px solid #2a3441; background: #0f141b; color: var(--text); }
 .chat-form button { background: var(--accent); color: black; border: none; padding: 10px 14px; border-radius: 8px; cursor: pointer; }
 
+/* Chat controls and history */
+.chat-controls { display: flex; gap: 10px; align-items: center; }
+.chat-controls .danger { background: #ff6675; color: black; }
+.muted { color: var(--muted); font-size: 12px; }
+
+.history { background: var(--panel); padding: 10px 12px; border-radius: 8px; }
+.history header { margin: 0 0 6px 0; font-size: 14px; color: var(--muted); }
+.history-list { list-style: decimal inside; margin: 0; padding: 0; display: grid; gap: 6px; }
+.history-item { display: grid; grid-template-columns: 90px 1fr; gap: 8px; align-items: baseline; }
+.history-item .role { display: inline-block; padding: 2px 6px; border-radius: 6px; font-size: 11px; letter-spacing: 0.3px; background: #263244; color: var(--text); text-align: center; }
+.history-item.user .role { background: #2a6f3e; }
+.history-item.assistant .role { background: #1f3550; }
+.history-item .preview { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

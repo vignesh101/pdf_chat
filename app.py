@@ -98,6 +98,12 @@ def create_app() -> Flask:
         # Return local history
         return jsonify({'ok': True, 'messages': session.get('chat_history', [])})
 
+    @app.post('/clear')
+    def clear_messages():
+        # Clear local chat history for this session
+        session['chat_history'] = []
+        return jsonify({'ok': True, 'messages': []})
+
     return app
 
 
