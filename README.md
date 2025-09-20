@@ -18,8 +18,9 @@ Create a `config.toml` at the project root or export environment variables. The 
 - `openai_base_url` (`OPENAI_BASE_URL`) — Override the OpenAI API base URL (e.g., for gateways).
 - `openai_api_key` (`OPENAI_API_KEY`) — Your OpenAI API key.
 - `disable_ssl` (`DISABLE_SSL`) — Set to `true` to disable SSL verification (use only for trusted setups).
-- `model_name` (`MODEL_NAME`) — The model to use for the Assistant (e.g., `gpt-4o-mini`).
-- `embedding_model_name` (`EMBEDDING_MODEL_NAME`) — Embedding model used when creating the Vector Store (e.g., `text-embedding-3-small` or `text-embedding-3-large`).
+- `mode` (`MODE`) — One of `assistants` (default) or `chat`. Use `chat` for custom OpenAI‑compatible servers that do not support Assistants/Vector Stores.
+- `model_name` (`MODEL_NAME`) — The model to use (Assistant or Chat depending on mode), e.g., `gpt-4o-mini`.
+- `embedding_model_name` (`EMBEDDING_MODEL_NAME`) — Reserved for embedding model selection. Note: current stable OpenAI SDKs create vector stores without an explicit embedding model parameter; this setting may be ignored depending on your SDK version.
 
 An example config is provided in `config.example.toml`.
 
@@ -53,7 +54,12 @@ An example config is provided in `config.example.toml`.
 ## Notes
 
 - This app uses Assistants API v2 with `file_search` and a vector store. First run creates and persists the assistant/vector store IDs under `data/state.json`.
-- The vector store is created with the embedding model from `embedding_model_name`.
+- Vector store creation currently does not accept an explicit embedding model in many SDK versions; the app creates the vector store with a name only. The `embedding_model_name` setting is kept for forward compatibility and may be ignored.
+ 
+### Modes
+
+- `assistants` (default): Uses Assistants API v2 with file_search and a vector store. Requires an API/base URL that implements these endpoints.
+- `chat`: Skips Assistants and Vector Stores. Uploaded files are indexed locally (simple TF‑IDF) and the app sends Chat Completions with the top snippets added to the system prompt. Works with most OpenAI‑compatible servers that support Chat Completions.
 - Files uploaded through the UI are sent to the OpenAI Files API with `purpose="assistants"`.
 - If you use a proxy or custom base URL (e.g., gateways), set them in the config.
 - For production, set a `SECRET_KEY` environment variable for Flask sessions.

@@ -6,8 +6,15 @@ import time
 from typing import Dict, List, Optional
 
 from openai import OpenAI
-from openai import NotFoundError as OpenAINotFoundError  # type: ignore
-from openai import APIStatusError as OpenAIAPIStatusError  # type: ignore
+# Be resilient to SDK version differences where these exceptions may be absent
+try:  # OpenAI SDK >= 1.0
+    from openai import NotFoundError as OpenAINotFoundError  # type: ignore
+except Exception:  # pragma: no cover - fallback for older/newer SDKs
+    OpenAINotFoundError = Exception  # type: ignore
+try:
+    from openai import APIStatusError as OpenAIAPIStatusError  # type: ignore
+except Exception:  # pragma: no cover - fallback for older/newer SDKs
+    OpenAIAPIStatusError = Exception  # type: ignore
 
 
 STATE_DIR = os.path.join(os.getcwd(), "data")
@@ -47,13 +54,10 @@ def ensure_vector_store(
         return vs_id
     base_url = getattr(client, "base_url", None) or os.environ.get("OPENAI_BASE_URL") or "https://api.openai.com/v1"
     try:
-        kwargs = {"name": name}
-        if embedding_model_name:
-            kwargs["embedding_configuration"] = {
-                "type": "model",
-                "model": embedding_model_name,
-            }
-        vs = client.vector_stores.create(**kwargs)
+        # Some SDK versions previously supported an 'embedding_configuration' parameter.
+        # Current stable SDKs do not. Create the vector store with just a name for
+        # broad compatibility across versions.
+        vs = client.vector_stores.create(name=name)
     except (OpenAINotFoundError, OpenAIAPIStatusError) as e:  # surface clearer guidance
         # Common cause: using Azure OpenAI or a gateway that doesn't implement Vector Stores/Assistants v2
         msg = (
@@ -90,16 +94,37 @@ def ensure_assistant(
             pass
         return assistant_id
 
-    assistant = client.assistants.create(
-        name="Document Chat Assistant",
-        instructions=(
-            instructions
-            or """You are a helpful assistant. Use the provided files to answer questions accurately. If information is not in the files, say you are unsure and suggest how to find it."""
-        ),
-        model=model_name,
-        tools=[{"type": "file_search"}],
-        tool_resources={"file_search": {"vector_store_ids": [vector_store_id]}},
-    )
+    # Try creating the assistant with tool resources attached (supported in newer SDKs)
+    try:
+        assistant = client.assistants.create(
+            name="Document Chat Assistant",
+            instructions=(
+                instructions
+                or """You are a helpful assistant. Use the provided files to answer questions accurately. If information is not in the files, say you are unsure and suggest how to find it."""
+            ),
+            model=model_name,
+            tools=[{"type": "file_search"}],
+            tool_resources={"file_search": {"vector_store_ids": [vector_store_id]}},
+        )
+    except (TypeError, OpenAIAPIStatusError):
+        # Fallback for older SDKs that don't accept tool_resources on create
+        assistant = client.assistants.create(
+            name="Document Chat Assistant",
+            instructions=(
+                instructions
+                or """You are a helpful assistant. Use the provided files to answer questions accurately. If information is not in the files, say you are unsure and suggest how to find it."""
+            ),
+            model=model_name,
+            tools=[{"type": "file_search"}],
+        )
+        try:
+            client.assistants.update(
+                assistant.id,
+                tool_resources={"file_search": {"vector_store_ids": [vector_store_id]}},
+                tools=[{"type": "file_search"}],
+            )
+        except Exception:
+            pass
     state["assistant_id"] = assistant.id
     _save_state(state)
     return assistant.id

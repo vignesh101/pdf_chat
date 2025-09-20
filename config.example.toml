@@ -15,6 +15,6 @@ disable_ssl = false
 # Assistant model name
 model_name = "gpt-4o-mini"
 
-# Embedding model for Vector Store creation
-# Common options: "text-embedding-3-small" (cheap), "text-embedding-3-large" (highest quality)
+# Embedding model (reserved / may be ignored by current SDKs)
+# Common values: "text-embedding-3-small" (cheap), "text-embedding-3-large" (high quality)
 embedding_model_name = "text-embedding-3-small"
