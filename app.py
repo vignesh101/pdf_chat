@@ -144,6 +144,15 @@ def create_app() -> Flask:
         if client is None:
             return jsonify({'ok': False, 'error': 'OpenAI client not configured. Set OPENAI_API_KEY or update config.toml.'}), 500
 
+        # Stash sources for later commit. Do not mutate chat_history here because
+        # streamed responses finalize headers before the generator completes.
+        try:
+            session['pending_assistant'] = {
+                'sources': ctx_chunks_meta,
+            }
+        except Exception:
+            pass
+
         def generate():
             acc = []
             try:
@@ -166,22 +175,41 @@ def create_app() -> Flask:
                         yield content
             except Exception as e:
                 yield f"\n[ERROR] {str(e)}"
-            # After streaming completes, append to session history
-            try:
-                answer = ''.join(acc)
-                hist = session.get('chat_history', [])
-                hist.append({'id': f'user-{len(hist)+1}', 'role': 'user', 'text': message})
-                hist.append({
-                    'id': f'assistant-{len(hist)+1}',
-                    'role': 'assistant',
-                    'text': answer,
-                    'sources': ctx_chunks_meta,
-                })
-                session['chat_history'] = hist[-50:]
-            except Exception:
-                pass
 
         return Response(stream_with_context(generate()), mimetype='text/plain; charset=utf-8')
+
+    @app.post('/chat/commit')
+    def chat_commit():
+        """Commit the assistant's streamed reply to session history.
+        Expects JSON: { question: str, answer: str }
+        """
+        data = request.get_json(silent=True) or {}
+        question = (data.get('question') or '').strip()
+        answer = (data.get('answer') or '').strip()
+        if not question or not answer:
+            return jsonify({'ok': False, 'error': 'question and answer required'}), 400
+        try:
+            hist = session.get('chat_history', [])
+            pending = session.get('pending_assistant') or {}
+            sources = pending.get('sources') or []
+            # Append user then assistant
+            hist.append({
+                'id': f'user-{len(hist)+1}',
+                'role': 'user',
+                'text': question,
+            })
+            hist.append({
+                'id': f'assistant-{len(hist)+1}',
+                'role': 'assistant',
+                'text': answer,
+                'sources': sources,
+            })
+            session['chat_history'] = hist[-50:]
+            # clear pending
+            session.pop('pending_assistant', None)
+            return jsonify({'ok': True, 'messages': session['chat_history']})
+        except Exception as e:
+            return jsonify({'ok': False, 'error': str(e)}), 500
 
     @app.post('/clear')
     def clear_messages():

@@ -471,13 +471,14 @@
         const input = $("#message");
         const text = input.value.trim();
         if (!text) return;
+        // Append the user's message immediately
         appendMessageObj({ role: 'user', text });
         input.value = '';
         btnSend.disabled = true;
-        const thinking = document.createElement('div');
-        thinking.className = 'msg assistant thinking';
-        thinking.innerText = 'Thinking…';
-        messagesEl.appendChild(thinking);
+        // Create a real assistant bubble we can live-update during streaming
+        const assistantLive = messageElFor({ role: 'assistant', text: 'Thinking…' });
+        const assistantBody = assistantLive.querySelector('.body');
+        messagesEl.appendChild(assistantLive);
         messagesEl.scrollTop = messagesEl.scrollHeight;
         try {
           const res = await fetch('/chat_stream', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ message: text }) });
@@ -490,19 +491,34 @@
               if (done) break;
               const chunk = decoder.decode(value, { stream: true });
               acc += chunk;
-              thinking.innerText = acc;
+              // Render as markdown-ish HTML as it streams
+              assistantBody.innerHTML = mdToHtml(acc);
               messagesEl.scrollTop = messagesEl.scrollHeight;
             }
-            thinking.remove();
+            // After stream ends, persist the conversation on the server
+            try {
+              const saveRes = await fetch('/chat/commit', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ question: text, answer: acc })
+              });
+              const saveDj = await saveRes.json();
+              if (!saveDj.ok) {
+                // Keep the streamed text visible and surface the error subtly
+                console.error('Commit failed:', saveDj.error);
+              }
+            } catch (e) {
+              console.error('Commit request failed', e);
+            }
             await refreshMessages();
           } else {
             const r = await fetch('/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ message: text }) });
             const dj = await r.json();
-            if (dj.ok) { thinking.remove(); await refreshMessages(); }
-            else { thinking.innerText = 'Error: ' + (dj.error || 'failed'); }
+            if (dj.ok) { await refreshMessages(); }
+            else { assistantBody.textContent = 'Error: ' + (dj.error || 'failed'); }
           }
         } catch (err) {
-          thinking.innerText = 'Request failed.';
+          assistantBody.textContent = 'Request failed.';
         } finally {
           btnSend.disabled = false;
         }
