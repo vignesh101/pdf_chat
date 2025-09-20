@@ -22,11 +22,18 @@ def create_app() -> Flask:
         from flask_session import Session as FlaskSession  # type: ignore
         sessions_dir = os.path.join(os.getcwd(), 'data', 'flask_sessions')
         os.makedirs(sessions_dir, exist_ok=True)
+        # Allow overriding signer via env if desired
+        use_signer_env = os.environ.get('SESSION_USE_SIGNER', '').strip().lower() in ('1', 'true', 'yes', 'on')
         app.config.update(
             SESSION_TYPE='filesystem',
             SESSION_FILE_DIR=sessions_dir,
             SESSION_PERMANENT=False,
-            SESSION_USE_SIGNER=True,
+            # NOTE: Some Flask-Session versions return a bytes value for the
+            # signed session id when used with newer Werkzeug, which causes
+            # a TypeError in set_cookie. Server-side sessions don’t require
+            # signing since the cookie only stores a random id, so disable it
+            # for maximum compatibility across environments.
+            SESSION_USE_SIGNER=bool(use_signer_env),
             SESSION_COOKIE_NAME='dc_session',
         )
         FlaskSession(app)

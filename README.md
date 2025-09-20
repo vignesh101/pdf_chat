@@ -68,3 +68,5 @@ An example config is provided in `config.example.toml`.
   pip install Flask-Session
   ```
   With `Flask-Session` present, the app stores session data on disk under `data/flask_sessions` and keeps the browser cookie small. Without it, the app falls back to signed cookies and automatically trims chat history and source previews to stay under browser cookie limits.
+
+  Note: Some Flask-Session/Werkzeug version combinations can cause a TypeError about a bytes-like cookie value when signing the server-side session id. To maximize compatibility, this app disables signing for server-side sessions by default (the cookie only contains a random id). If you prefer signing, set `SESSION_USE_SIGNER=1` in the environment before starting the app.
