@@ -231,3 +231,21 @@ def get_status() -> Dict[str, Any]:
         "dim": int(dim) if isinstance(dim, (int,)) else None,
     }
 
+
+def clear_all() -> Dict[str, Any]:
+    """Delete the web FAISS index and metadata, and reset state."""
+    global _INDEX, _DIM, _META
+    try:
+        if os.path.exists(INDEX_BIN):
+            os.remove(INDEX_BIN)
+    except Exception:
+        pass
+    try:
+        if os.path.exists(META_JSON):
+            os.remove(META_JSON)
+    except Exception:
+        pass
+    _INDEX = None
+    _DIM = None
+    _META = {"chunks": [], "next_id": 0, "dim": None, "files": []}
+    return get_status()

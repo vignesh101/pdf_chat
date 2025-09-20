@@ -322,10 +322,23 @@ def create_app() -> Flask:
         if not message:
             return jsonify({'ok': False, 'error': 'Empty message'}), 400
 
+        # Options
+        try:
+            max_results = int(data.get('max_results') or 5)
+        except Exception:
+            max_results = 5
+        try:
+            k_ctx = int(data.get('k_ctx') or 5)
+        except Exception:
+            k_ctx = 5
+        # Clamp
+        max_results = max(1, min(10, max_results))
+        k_ctx = max(1, min(10, k_ctx))
+
         # Build candidate URLs via DDG + any URLs present in the message
-        ddg_hits = _ddg_search(message, max_results=5)
+        ddg_hits = _ddg_search(message, max_results=max_results)
         ddg_urls = [h.get('url') for h in ddg_hits if isinstance(h.get('url'), str)]
-        urls = list(dict.fromkeys((_extract_urls_from_text(message) + ddg_urls)))[:5]
+        urls = list(dict.fromkeys((_extract_urls_from_text(message) + ddg_urls)))[:max_results]
 
         # Fetch pages and index into web-only FAISS store
         web_pages = _fetch_urls_text(urls)
@@ -336,7 +349,6 @@ def create_app() -> Flask:
             pass
 
         # Retrieve best context from web index
-        k_ctx = 5
         try:
             ctx_chunks_meta = web_store.search_with_meta(message, k=k_ctx)
         except Exception:
@@ -393,9 +405,21 @@ def create_app() -> Flask:
         if not message:
             return jsonify({'ok': False, 'error': 'Empty message'}), 400
 
-        ddg_hits = _ddg_search(message, max_results=5)
+        # Options
+        try:
+            max_results = int(data.get('max_results') or 5)
+        except Exception:
+            max_results = 5
+        try:
+            k_ctx = int(data.get('k_ctx') or 5)
+        except Exception:
+            k_ctx = 5
+        max_results = max(1, min(10, max_results))
+        k_ctx = max(1, min(10, k_ctx))
+
+        ddg_hits = _ddg_search(message, max_results=max_results)
         ddg_urls = [h.get('url') for h in ddg_hits if isinstance(h.get('url'), str)]
-        urls = list(dict.fromkeys((_extract_urls_from_text(message) + ddg_urls)))[:5]
+        urls = list(dict.fromkeys((_extract_urls_from_text(message) + ddg_urls)))[:max_results]
 
         web_pages = _fetch_urls_text(urls)
         try:
@@ -404,7 +428,6 @@ def create_app() -> Flask:
         except Exception:
             pass
 
-        k_ctx = 5
         try:
             ctx_chunks_meta = web_store.search_with_meta(message, k=k_ctx)
         except Exception:
@@ -459,6 +482,14 @@ def create_app() -> Flask:
                 yield f"\n[ERROR] {str(e)}"
 
         return Response(stream_with_context(generate()), mimetype='text/plain; charset=utf-8')
+
+    @app.post('/web/index/clear_all')
+    def web_index_clear_all():
+        try:
+            st = web_store.clear_all()
+            return jsonify({'ok': True, 'index': st})
+        except Exception as e:
+            return jsonify({'ok': False, 'error': str(e)}), 500
 
     @app.post('/webchat/commit')
     def webchat_commit():

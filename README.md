@@ -8,6 +8,7 @@ A simple Python web app to upload documents and chat with them using OpenAI Embe
 - PDF ingestion locally (requires `pypdf` or `PyPDF2`)
 - Retrieve top matching chunks via embeddings similarity
 - Chat with grounded answers using retrieved snippets
+- Web Chat: ask questions answered from the internet via DuckDuckGo search (RAG over fetched pages)
 - Sources panel under replies with snippet previews and scores
 - Drag & drop uploads and copy-to-clipboard for messages
 - Configurable via `config.toml` and environment variables
@@ -56,6 +57,35 @@ An example config is provided in `config.example.toml`.
    ```
 
 4. Open `http://localhost:5000` in your browser.
+
+## Web Chat (Internet RAG)
+
+This app includes a separate “Web” chat mode that uses DuckDuckGo Search to discover relevant web pages, fetches them over HTTP, extracts readable text, stores it in a dedicated FAISS index, and then answers your question grounded in those excerpts.
+
+- No API key needed for search: it uses the `duckduckgo_search` library (DDGS).
+- Proxies and SSL verification settings are honored (see `proxy_url` and `disable_ssl`).
+- Retrieved web content is stored under `data/web` as a separate FAISS index.
+
+How it works at a glance:
+- Perform a DDG text search for your query and combine with any URLs you typed.
+- Fetch up to 5 pages, strip HTML to text, chunk, embed, and add to the web index.
+- Retrieve the top matches from the web index and pass them to Chat Completions as context.
+- The reply shows a Sources panel with page titles/URLs and snippet previews.
+
+Using it:
+- In the UI, click the “Web” tab above the input box and ask your question.
+- For streaming responses the app uses `/webchat_stream` with a follow-up `/webchat/commit` to save history; non-streaming uses `/webchat`.
+- Clear just the Web chat history via “New Chat” or the Clear button; the web FAISS store persists in `data/web` between sessions.
+- Adjust retrieval:
+  - “Web pages” controls how many pages to fetch/search (1–10).
+  - “Context k” controls how many chunks are retrieved as context (1–10).
+- Manage cache:
+  - Use “Clear Web Cache” (in the Status panel) to delete the web FAISS index and metadata under `data/web`.
+
+Notes and limits:
+- Some sites may block automated fetching; results may be partial or missing.
+- Respect target sites’ terms of use and robots policies.
+- Network errors are handled gracefully (the answer may indicate missing web content).
 
 ## Notes
 
