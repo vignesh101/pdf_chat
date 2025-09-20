@@ -177,16 +177,407 @@
         return (str || '').replace(/[&<>"']/g, (ch) => map[ch]);
       }
 
+      // Enhanced Markdown -> HTML rendering for readable output
       function mdToHtml(text) {
         if (!text) return '';
-        let html = escapeHtml(text);
-        html = html.replace(/```([a-zA-Z0-9_-]+)?\n([\s\S]*?)```/g, (_, lang, code) => {
-          return `<pre class="code-block"><code class="lang-${lang || 'text'}">${code.replace(/\n$/, '')}</code></pre>`;
-        });
-        html = html.replace(/`([^`]+)`/g, '<code class="inline-code">$1</code>');
-        html = html.replace(/(https?:\/\/[\w.-]+(?:\/[\w\-._~:/?#[\]@!$&'()*+,;=.]+)?)/g, '<a href="$1" target="_blank" rel="noopener">$1</a>');
-        html = html.replace(/\n\n+/g, '</p><p>').replace(/\n/g, '<br/>');
-        return `<p>${html}</p>`;
+        const esc = escapeHtml;
+
+        function sanitizeUrl(raw) {
+          try {
+            const url = (raw || '').trim();
+            if (/^https?:\/\//i.test(url)) {
+              return url.replace(/\"/g, '&quot;');
+            }
+            return '';
+          } catch (_) { return ''; }
+        }
+
+        function renderInline(raw) {
+          // Escape first, then apply markdown replacements on the escaped text.
+          let t = esc(raw || '');
+          const placeholders = [];
+          // Protect code spans first
+          t = t.replace(/`([^`]+)`/g, (_, code) => {
+            const idx = placeholders.length;
+            placeholders.push(`<code class=\"inline-code\">${code}</code>`);
+            return `\u0001CODE_${idx}\u0002`;
+          });
+          // Images ![alt](url)
+          t = t.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, (_, alt, url) => {
+            const safe = sanitizeUrl(url);
+            const escAlt = (alt || '').replace(/\"/g, '&quot;');
+            if (!safe) return `[image: ${escAlt}]`;
+            return `<img src=\"${safe}\" alt=\"${escAlt}\" />`;
+          });
+          // Links [text](url)
+          t = t.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_, label, url) => {
+            const safe = sanitizeUrl(url);
+            if (!safe) return label;
+            return `<a href=\"${safe}\" target=\"_blank\" rel=\"noopener\">${label}</a>`;
+          });
+          // Autolink bare URLs
+          t = t.replace(/(https?:\/\/[\w.-]+(?:\/[\w\-._~:/?#[\]@!$&'()*+,;=.]+)?)/g, '<a href=\"$1\" target=\"_blank\" rel=\"noopener\">$1</a>');
+          // Bold, then italics (simple rules)
+          t = t.replace(/(\*\*|__)(.+?)\1/g, '<strong>$2</strong>');
+          t = t.replace(/(^|\W)\*(?!\*)([^\*]+)\*(?=\W|$)/g, '$1<em>$2</em>');
+          t = t.replace(/(^|\W)_(?!_)([^_]+)_(?=\W|$)/g, '$1<em>$2</em>');
+          // Restore code span placeholders
+          t = t.replace(/\u0001CODE_(\d+)\u0002/g, (_, i) => placeholders[Number(i)] || '');
+          return t;
+        }
+
+        // Normalize newlines
+        const lines = (text + '').replace(/\r\n?/g, '\n').split('\n');
+        let i = 0;
+        let out = [];
+        let paraBuf = [];
+        let inFence = false;
+        let fenceLang = 'text';
+        let fenceLines = [];
+
+        function flushPara() {
+          if (paraBuf.length === 0) return;
+          const s = paraBuf.join(' ').trim();
+          if (s) out.push(`<p>${renderInline(s)}</p>`);
+          paraBuf = [];
+        }
+
+        function parseTableRow(line) {
+          // Trim optional leading/trailing pipes and split
+          let s = (line || '').trim();
+          if (s.startsWith('|')) s = s.slice(1);
+          if (s.endsWith('|')) s = s.slice(0, -1);
+          return s.split('|').map(c => c.trim());
+        }
+
+        function parseTableSep(line) {
+          // Return alignment array if valid separator row, else null
+          let s = (line || '').trim();
+          if (s.startsWith('|')) s = s.slice(1);
+          if (s.endsWith('|')) s = s.slice(0, -1);
+          const parts = s.split('|').map(c => c.trim());
+          if (parts.length === 0) return null;
+          const aligns = [];
+          for (const p of parts) {
+            if (!/^:?-{3,}:?$/.test(p)) return null;
+            const left = p.startsWith(':');
+            const right = p.endsWith(':');
+            aligns.push(right && left ? 'center' : right ? 'right' : left ? 'left' : 'left');
+          }
+          return aligns;
+        }
+
+        while (i < lines.length) {
+          let line = lines[i];
+
+          // Fenced code blocks ```lang ...```
+          const fence = line.match(/^\s*```([a-zA-Z0-9_-]*)\s*$/);
+          if (fence) {
+            if (!inFence) {
+              inFence = true;
+              fenceLang = fence[1] || 'text';
+              fenceLines = [];
+            } else {
+              // Closing fence
+              out.push(`<pre class=\"code-block\"><code class=\"lang-${esc(fenceLang)}\">${esc(fenceLines.join('\n'))}</code></pre>`);
+              inFence = false;
+              fenceLang = 'text';
+              fenceLines = [];
+            }
+            i++;
+            continue;
+          }
+          if (inFence) { fenceLines.push(line); i++; continue; }
+
+          // Horizontal rule
+          if (/^\s{0,3}(\*\s?\*\s?\*|-{3,}|_{3,})\s*$/.test(line)) {
+            flushPara();
+            out.push('<hr/>' );
+            i++;
+            continue;
+          }
+
+          // Headings # .. ######
+          const h = line.match(/^(#{1,6})\s+(.+)$/);
+          if (h) {
+            flushPara();
+            const level = h[1].length;
+            out.push(`<h${level}>${renderInline(h[2].trim())}</h${level}>`);
+            i++;
+            continue;
+          }
+
+          // Blockquote
+          if (/^\s*>\s?/.test(line)) {
+            flushPara();
+            const bq = [];
+            while (i < lines.length && /^\s*>\s?/.test(lines[i])) {
+              bq.push(lines[i].replace(/^\s*>\s?/, ''));
+              i++;
+            }
+            const inner = mdToHtml(bq.join('\n'));
+            out.push(`<blockquote>${inner}</blockquote>`);
+            continue;
+          }
+
+          // Unordered list
+          if (/^\s*[-+*]\s+/.test(line)) {
+            flushPara();
+            const items = [];
+            while (i < lines.length && /^\s*[-+*]\s+/.test(lines[i])) {
+              const m = lines[i].match(/^\s*[-+*]\s+(.+)$/);
+              items.push(m ? m[1] : lines[i]);
+              i++;
+            }
+            out.push('<ul>' + items.map(it => `<li>${renderInline(it)}</li>`).join('') + '</ul>');
+            continue;
+          }
+
+          // Ordered list
+          if (/^\s*\d+\.\s+/.test(line)) {
+            flushPara();
+            const items = [];
+            while (i < lines.length && /^\s*\d+\.\s+/.test(lines[i])) {
+              const m = lines[i].match(/^\s*\d+\.\s+(.+)$/);
+              items.push(m ? m[1] : lines[i]);
+              i++;
+            }
+            out.push('<ol>' + items.map(it => `<li>${renderInline(it)}</li>`).join('') + '</ol>');
+            continue;
+          }
+
+          // GitHub-Flavored Markdown tables
+          if (line.includes('|') && i + 1 < lines.length) {
+            const headerCells = parseTableRow(line);
+            const aligns = parseTableSep(lines[i + 1]);
+            if (aligns && headerCells.length) {
+              flushPara();
+              i += 2; // consume header + separator
+              const rows = [];
+              while (i < lines.length) {
+                const ln = lines[i];
+                if (!ln || !ln.includes('|')) break;
+                const rowCells = parseTableRow(ln);
+                if (rowCells.length === 1 && rowCells[0] === '') break;
+                rows.push(rowCells);
+                i++;
+              }
+              const cols = Math.max(headerCells.length, aligns.length);
+              const ths = headerCells.map((c, idx) => {
+                const al = aligns[Math.min(idx, aligns.length - 1)] || 'left';
+                return `<th style=\"text-align:${al}\">${renderInline(c)}</th>`;
+              }).join('');
+              const tb = rows.map(r => {
+                const tds = [];
+                for (let k = 0; k < Math.max(cols, r.length); k++) {
+                  const c = r[k] || '';
+                  const al = aligns[Math.min(k, aligns.length - 1)] || 'left';
+                  tds.push(`<td style=\"text-align:${al}\">${renderInline(c)}</td>`);
+                }
+                return `<tr>${tds.join('')}</tr>`;
+              }).join('');
+              out.push(`<table><thead><tr>${ths}</tr></thead><tbody>${tb}</tbody></table>`);
+              continue;
+            }
+          }
+
+          // Blank line -> paragraph break
+          if (/^\s*$/.test(line)) { flushPara(); i++; continue; }
+
+          // Otherwise, accumulate paragraph text
+          paraBuf.push(line);
+          i++;
+        }
+
+        // Flush any remaining paragraph
+        flushPara();
+
+        // If a code fence never closed, flush it as-is
+        if (inFence) {
+          out.push(`<pre class=\"code-block\"><code class=\"lang-${esc(fenceLang)}\">${esc(fenceLines.join('\n'))}</code></pre>`);
+        }
+
+        return out.join('');
+      }
+
+      // Lightweight client-side syntax highlighter (no CDN)
+      function highlightCode(src, lang) {
+        const esc = escapeHtml;
+        const l = (lang || '').toLowerCase();
+
+        function span(cls, s) { return '<span class="tok ' + cls + '">' + esc(s) + '</span>'; }
+
+        function runRegex(s, regex, classify) {
+          let out = '';
+          let last = 0;
+          let m;
+          regex.lastIndex = 0;
+          while ((m = regex.exec(s))) {
+            if (m.index > last) out += esc(s.slice(last, m.index));
+            out += classify(m);
+            last = regex.lastIndex;
+          }
+          if (last < s.length) out += esc(s.slice(last));
+          return out;
+        }
+
+        function highlightJSON(s) {
+          const re = /"(?:\\.|[^"\\])*"|-?\b\d+(?:\.\d+)?(?:[eE][+-]?\d+)?\b|\b(?:true|false)\b|\bnull\b|[{}\[\]:,]/g;
+          return runRegex(s, re, (m) => {
+            const tok = m[0];
+            if (tok[0] === '"') return span('string', tok);
+            if (tok === 'true' || tok === 'false') return span('boolean', tok);
+            if (tok === 'null') return span('null', tok);
+            if (/^-?\d/.test(tok)) return span('number', tok);
+            return span('punc', tok);
+          });
+        }
+
+        function highlightCLike(s, keywords, opts) {
+          const kw = keywords.map(k => k.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&')).join('|');
+          const re = new RegExp(
+            [
+              opts.blockComments ? '/\\*[\\s\\S]*?\\*/' : null,
+              opts.lineComments ? '//[^\n]*' : null,
+              '"(?:\\.|[^"\\])*"',
+              "'(?:\\.|[^'\\])*'",
+              opts.backticks ? '`(?:\\.|[^`\\])*`' : null,
+              '-?\\b\\d+(?:\\.\\d+)?(?:[eE][+-]?\\d+)?\\b',
+              '(?:^|\\b)(' + kw + ')(?:\\b)'
+            ].filter(Boolean).join('|'),
+            'g'
+          );
+          return runRegex(s, re, (m) => {
+            const tok = m[0];
+            if (tok.startsWith('/*') || tok.startsWith('//')) return span('comment', tok);
+            if (tok[0] === '"' || tok[0] === '\'' || tok[0] === '`') return span('string', tok);
+            if (/^-?\d/.test(tok)) return span('number', tok);
+            const kwMatch = m[1];
+            if (kwMatch) return span('keyword', kwMatch);
+            return esc(tok);
+          });
+        }
+
+        function highlightPython(s) {
+          const keywords = [
+            'False','class','finally','is','return','None','continue','for','lambda','try','True','def','from','nonlocal','while','and','del','global','not','with','as','elif','if','or','yield','assert','else','import','pass','break','except','in','raise'
+          ];
+          const kw = keywords.map(k => k.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&')).join('|');
+          const re = new RegExp(
+            [
+              '"""[\\s\\S]*?"""',
+              "'''[\\s\\S]*?'''",
+              '#[^\n]*',
+              '"(?:\\.|[^"\\])*"',
+              "'(?:\\.|[^'\\])*'",
+              '-?\\b\\d+(?:\\.\\d+)?(?:[eE][+-]?\\d+)?\\b',
+              '(?:^|\\b)(' + kw + ')(?:\\b)'
+            ].join('|'), 'g'
+          );
+          return runRegex(s, re, (m) => {
+            const tok = m[0];
+            if (tok.startsWith('"""') || tok.startsWith("'''")) return span('string', tok);
+            if (tok.startsWith('#')) return span('comment', tok);
+            if (tok[0] === '"' || tok[0] === '\'') return span('string', tok);
+            if (/^-?\d/.test(tok)) return span('number', tok);
+            if (m[1]) return span('keyword', m[1]);
+            return esc(tok);
+          });
+        }
+
+        function highlightBash(s) {
+          const keywords = ['if','then','fi','elif','else','for','in','do','done','case','esac','while','until','function','select'];
+          const kw = keywords.map(k => k.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&')).join('|');
+          const re = new RegExp(
+            [
+              '#[^\n]*',
+              '"(?:\\.|[^"\\])*"',
+              "'(?:\\.|[^'\\])*'",
+              '\\$(?:[A-Za-z_][A-Za-z0-9_]*|\\{[^}]+\\})',
+              '-?\\b\\d+(?:\\.\\d+)?\\b',
+              '(?:^|\\b)(' + kw + ')(?:\\b)'
+            ].join('|'), 'g'
+          );
+          return runRegex(s, re, (m) => {
+            const tok = m[0];
+            if (tok.startsWith('#')) return span('comment', tok);
+            if (tok[0] === '"' || tok[0] === '\'') return span('string', tok);
+            if (tok[0] === '$') return span('variable', tok);
+            if (/^-?\d/.test(tok)) return span('number', tok);
+            if (m[1]) return span('keyword', m[1]);
+            return esc(tok);
+          });
+        }
+
+        function highlightYAML(s) {
+          const lines = s.split(/\n/);
+          const boolNull = /\b(?:true|false|null|~)\b/i;
+          const num = /-?\b\d+(?:\.\d+)?\b/;
+          return lines.map(line => {
+            // Comments
+            const hash = line.indexOf('#');
+            let before = hash >= 0 ? line.slice(0, hash) : line;
+            const comment = hash >= 0 ? line.slice(hash) : '';
+            // Key detection (at line start, ignoring list dash)
+            const m = before.match(/^\s*-?\s*([A-Za-z_][\w-]*)\s*:\s?(.*)$/);
+            let rendered;
+            if (m) {
+              const key = m[1];
+              const rest = m[2] || '';
+              rendered = span('key', key) + span('punc', ':') + ' ' + renderScalars(rest);
+            } else {
+              rendered = renderScalars(before);
+            }
+            if (comment) rendered += span('comment', comment);
+            return rendered;
+          }).join('\n');
+
+          function renderScalars(str) {
+            return runRegex(str, /"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|\b(?:true|false|null|~)\b|-?\b\d+(?:\.\d+)?\b/g, (m) => {
+              const tok = m[0];
+              if (tok[0] === '"' || tok[0] === '\'') return span('string', tok);
+              if (boolNull.test(tok)) return /null|~/i.test(tok) ? span('null', tok) : span('boolean', tok);
+              if (num.test(tok)) return span('number', tok);
+              return esc(tok);
+            });
+          }
+        }
+
+        switch (l) {
+          case 'json': return highlightJSON(src);
+          case 'js': case 'jsx': case 'ts': case 'tsx': case 'javascript': case 'typescript':
+            return highlightCLike(src,
+              ['break','case','catch','class','const','continue','debugger','default','delete','do','else','export','extends','finally','for','function','if','import','in','instanceof','let','new','return','super','switch','this','throw','try','typeof','var','void','while','with','yield','await','enum','implements','interface','package','private','protected','public','static'],
+              { lineComments: true, blockComments: true, backticks: true }
+            );
+          case 'py': case 'python':
+            return highlightPython(src);
+          case 'bash': case 'sh': case 'shell':
+            return highlightBash(src);
+          case 'yaml': case 'yml':
+            return highlightYAML(src);
+          default:
+            // Fallback: JSON detection for code starting with { or [
+            if (/^\s*[\[{]/.test(src)) return highlightJSON(src);
+            return esc(src);
+        }
+      }
+
+      function applyHighlight(root) {
+        try {
+          const codes = root.querySelectorAll('pre.code-block > code');
+          codes.forEach((code) => {
+            const cls = code.getAttribute('class') || '';
+            const m = cls.match(/lang-([a-z0-9_-]+)/i);
+            const lang = m ? m[1] : 'text';
+            const raw = code.textContent || '';
+            const html = highlightCode(raw, lang);
+            code.innerHTML = html;
+            if (code.parentElement) code.parentElement.setAttribute('data-lang', lang);
+          });
+        } catch (e) {
+          // non-fatal
+        }
       }
 
       function messageElFor(m) {
@@ -202,6 +593,7 @@
         const body = document.createElement('div');
         body.className = 'body';
         body.innerHTML = mdToHtml(m.text || '');
+        applyHighlight(body);
         const tools = document.createElement('div');
         tools.className = 'tools';
         const copyBtn = document.createElement('button');
@@ -493,6 +885,7 @@
               acc += chunk;
               // Render as markdown-ish HTML as it streams
               assistantBody.innerHTML = mdToHtml(acc);
+              applyHighlight(assistantBody);
               messagesEl.scrollTop = messagesEl.scrollHeight;
             }
             // After stream ends, persist the conversation on the server
