@@ -61,6 +61,34 @@
             <div id="history-list" class="history-list"></div>
             <div id="history-meta" class="history-meta"></div>
           </section>
+
+          <section class="status-panel">
+            <h3>Status</h3>
+            <div class="status-row">
+              <span id="status-client" class="badge">OpenAI: …</span>
+            </div>
+            <div class="status-row" style="margin-top:6px;">
+              <span id="status-index" class="badge">Index: …</span>
+            </div>
+            <div class="status-row" style="margin-top:6px;">
+              <span id="status-files" class="badge neutral">Files: …</span>
+            </div>
+            <div class="status-actions">
+              <button id="btn-rebuild" type="button" class="action-btn">Rebuild Index</button>
+              <button id="btn-cancel-rebuild" type="button" class="action-btn warn" style="display:none;">Cancel</button>
+              <button id="btn-clear-index" type="button" class="action-btn danger">Clear Index</button>
+              <button id="btn-clear-all" type="button" class="action-btn danger">Clear All Data</button>
+            </div>
+            <div class="progress" id="rebuild-progress-wrap">
+              <div id="rebuild-progress" class="progress-bar" style="width:0%"></div>
+            </div>
+            <div id="status-note" class="status-note"></div>
+          </section>
+
+          <section class="recent-files">
+            <h3>Upload History</h3>
+            <div id="recent-files-list" class="recent-files-list"></div>
+          </section>
         </div>
 
         <div class="sidebar-footer">
@@ -85,6 +113,12 @@
           </button>
           <h1>Document Chat</h1>
         </header>
+
+        {% if not client_ready %}
+        <div class="alert warn" role="alert" style="margin: 12px 16px 0 16px;">
+          OpenAI client is not configured. Set OPENAI_API_KEY or update config.toml, then restart the app.
+        </div>
+        {% endif %}
 
         <div class="chat-container">
           <div id="messages" class="messages"></div>
@@ -119,6 +153,17 @@
       const historyList = $('#history-list');
       const historyMeta = $('#history-meta');
       const btnSend = $('#btn-send');
+      const statusClient = $('#status-client');
+      const statusIndex = $('#status-index');
+      const statusFiles = $('#status-files');
+      const statusNote = $('#status-note');
+      const btnRebuild = $('#btn-rebuild');
+      const btnCancelRebuild = $('#btn-cancel-rebuild');
+      const btnClearIndex = $('#btn-clear-index');
+      const btnClearAll = $('#btn-clear-all');
+      const progressWrap = $('#rebuild-progress-wrap');
+      const progressBar = $('#rebuild-progress');
+      const recentFilesList = $('#recent-files-list');
 
       // Sidebar elements
       const sidebar = $('#sidebar');
@@ -270,8 +315,103 @@
           messagesEl.innerHTML = '';
           (data.messages || []).forEach(m => appendMessageObj(m));
           renderHistoryList(data.messages || []);
+          // also refresh status while we're here
+          refreshStatus();
         } catch (e) {
           console.error(e);
+        }
+      }
+
+      let rebuildPoller = null;
+      async function refreshStatus() {
+        try {
+          const res = await fetch('/status');
+          const data = await res.json();
+          if (!data.ok) return;
+          const clientReady = !!data.client_ready;
+          const idx = data.index || {};
+          const idxReady = !!idx.index_ready;
+          const chunks = typeof idx.chunks_count === 'number' ? idx.chunks_count : 0;
+          const files = typeof idx.files_count === 'number' ? idx.files_count : 0;
+          statusClient.textContent = clientReady ? 'OpenAI: Ready' : 'OpenAI: Not configured';
+          statusClient.className = 'badge ' + (clientReady ? 'ok' : 'err');
+          statusIndex.textContent = idxReady ? `Index: Ready • ${chunks} chunk${chunks===1?'':'s'}` : `Index: Not initialized`;
+          statusIndex.className = 'badge ' + (idxReady && chunks>0 ? 'ok' : 'err');
+          statusFiles.textContent = `Files: ${files}`;
+
+          // Progress UI
+          const rb = (idx && idx.rebuild) || {};
+          const inProg = !!rb.in_progress;
+          const pct = Math.max(0, Math.min(100, Number(rb.progress || 0)));
+          progressWrap.style.display = inProg ? 'block' : 'none';
+          progressBar.style.width = pct + '%';
+          btnCancelRebuild.style.display = inProg ? 'inline-block' : 'none';
+          if (inProg) {
+            statusNote.textContent = `Rebuilding... ${pct.toFixed(0)}%`;
+            if (!rebuildPoller) {
+              rebuildPoller = setInterval(refreshStatus, 1000);
+            }
+          } else {
+            if (rebuildPoller) { clearInterval(rebuildPoller); rebuildPoller = null; }
+            if (rb.error) {
+              statusNote.textContent = 'Rebuild failed: ' + rb.error;
+            } else if (rb.cancelled) {
+              statusNote.textContent = 'Rebuild cancelled.';
+            } else if (pct >= 100 && chunks > 0) {
+              statusNote.textContent = 'Index ready.';
+            }
+          }
+
+          // Refresh upload history separately
+          refreshFiles();
+        } catch (e) {
+          // ignore
+        }
+      }
+
+      function fmtTime(ts) {
+        try { if (!ts) return ''; const d = new Date(ts * 1000); return d.toLocaleString(); } catch (_) { return ''; }
+      }
+
+      async function refreshFiles() {
+        try {
+          const res = await fetch('/files');
+          const data = await res.json();
+          recentFilesList.innerHTML = '';
+          if (!data.ok || !Array.isArray(data.files) || data.files.length === 0) {
+            recentFilesList.innerHTML = '<div class="empty-history">No files yet</div>';
+            return;
+          }
+          data.files.forEach((f) => {
+            const row = document.createElement('div');
+            row.className = 'recent-file';
+            const left = document.createElement('div');
+            left.className = 'rf-left';
+            left.innerHTML = `<div class=\"rf-name\">${escapeHtml(f.name || f.file_id)}</div><div class=\"rf-meta\">${fmtTime(f.created_at)} • ${f.chunks} chunk${(f.chunks===1)?'':'s'}</div>`;
+            const right = document.createElement('div');
+            right.className = 'rf-actions';
+            const del = document.createElement('button');
+            del.type = 'button';
+            del.className = 'action-btn danger';
+            del.textContent = 'Remove';
+            del.addEventListener('click', async () => {
+              if (!confirm(`Remove \"${f.name}\" and its chunks from index?`)) return;
+              del.disabled = true;
+              try {
+                const r = await fetch('/files/delete', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ file_id: f.file_id }) });
+                const dj = await r.json();
+                if (dj.ok) { refreshStatus(); refreshFiles(); }
+                else { alert('Failed to remove: ' + (dj.error || 'unknown error')); }
+              } catch (e) { alert('Request failed while removing.'); }
+              finally { del.disabled = false; }
+            });
+            right.appendChild(del);
+            row.appendChild(left);
+            row.appendChild(right);
+            recentFilesList.appendChild(row);
+          });
+        } catch (e) {
+          recentFilesList.innerHTML = '<div class="empty-history">Failed to load files</div>';
         }
       }
 
@@ -316,6 +456,8 @@
           if (data.ok) {
             uploadStatus.textContent = `Uploaded ${data.file_ids.length} file(s)`;
             droppedFiles = [];
+            refreshStatus();
+            refreshFiles();
           } else {
             uploadStatus.textContent = `Error: ${data.error || 'upload failed'}`;
           }
@@ -338,17 +480,26 @@
         messagesEl.appendChild(thinking);
         messagesEl.scrollTop = messagesEl.scrollHeight;
         try {
-          const res = await fetch('/chat', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ message: text })
-          });
-          const data = await res.json();
-          if (data.ok) {
-            thinking.remove(); // Remove thinking indicator
+          const res = await fetch('/chat_stream', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ message: text }) });
+          if (res.ok && res.body) {
+            const reader = res.body.getReader();
+            const decoder = new TextDecoder();
+            let acc = '';
+            while (true) {
+              const { value, done } = await reader.read();
+              if (done) break;
+              const chunk = decoder.decode(value, { stream: true });
+              acc += chunk;
+              thinking.innerText = acc;
+              messagesEl.scrollTop = messagesEl.scrollHeight;
+            }
+            thinking.remove();
             await refreshMessages();
           } else {
-            thinking.innerText = 'Error: ' + (data.error || 'failed');
+            const r = await fetch('/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ message: text }) });
+            const dj = await r.json();
+            if (dj.ok) { thinking.remove(); await refreshMessages(); }
+            else { thinking.innerText = 'Error: ' + (dj.error || 'failed'); }
           }
         } catch (err) {
           thinking.innerText = 'Request failed.';
@@ -414,6 +565,90 @@
 
       // Initial load
       refreshMessages();
+      refreshStatus();
+      refreshFiles();
+
+      btnRebuild.addEventListener('click', async () => {
+        btnRebuild.disabled = true;
+        statusNote.textContent = 'Rebuilding index...';
+        try {
+          const res = await fetch('/index/rebuild_async', { method: 'POST' });
+          const data = await res.json();
+          if (data.ok) {
+            progressWrap.style.display = 'block';
+            statusNote.textContent = 'Rebuilding...';
+            refreshStatus(); // start polling via refresh
+          } else {
+            statusNote.textContent = 'Rebuild failed: ' + (data.error || 'unknown error');
+          }
+        } catch (e) {
+          statusNote.textContent = 'Rebuild request failed.';
+        } finally {
+          btnRebuild.disabled = false;
+        }
+      });
+
+      btnClearIndex.addEventListener('click', async () => {
+        const sure = confirm('Clear FAISS index? (Metadata kept; you can rebuild later)');
+        if (!sure) return;
+        btnClearIndex.disabled = true;
+        statusNote.textContent = 'Clearing index...';
+        try {
+          const res = await fetch('/index/clear', { method: 'POST' });
+          const data = await res.json();
+          if (data.ok) {
+            statusNote.textContent = 'Index cleared.';
+            refreshStatus();
+          } else {
+            statusNote.textContent = 'Clear failed: ' + (data.error || 'unknown error');
+          }
+        } catch (e) {
+          statusNote.textContent = 'Clear request failed.';
+        } finally {
+          btnClearIndex.disabled = false;
+        }
+      });
+
+      btnCancelRebuild.addEventListener('click', async () => {
+        btnCancelRebuild.disabled = true;
+        statusNote.textContent = 'Cancelling...';
+        try {
+          const res = await fetch('/index/rebuild_cancel', { method: 'POST' });
+          const data = await res.json();
+          if (data.ok) {
+            // polling loop will detect finish and show cancelled
+            refreshStatus();
+          } else {
+            statusNote.textContent = 'Cancel failed: ' + (data.error || 'unknown error');
+          }
+        } catch (e) {
+          statusNote.textContent = 'Cancel request failed.';
+        } finally {
+          btnCancelRebuild.disabled = false;
+        }
+      });
+
+      btnClearAll.addEventListener('click', async () => {
+        const sure = confirm('Clear ALL data? This deletes both the index and metadata. This cannot be undone.');
+        if (!sure) return;
+        btnClearAll.disabled = true;
+        statusNote.textContent = 'Clearing all data...';
+        try {
+          const res = await fetch('/index/clear_all', { method: 'POST' });
+          const data = await res.json();
+          if (data.ok) {
+            statusNote.textContent = 'All data cleared.';
+            progressWrap.style.display = 'none';
+            refreshStatus();
+          } else {
+            statusNote.textContent = 'Clear all failed: ' + (data.error || 'unknown error');
+          }
+        } catch (e) {
+          statusNote.textContent = 'Clear all request failed.';
+        } finally {
+          btnClearAll.disabled = false;
+        }
+      });
     </script>
   </body>
   </html>

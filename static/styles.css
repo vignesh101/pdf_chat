@@ -140,8 +140,23 @@ html, body {
   gap: 20px;
 }
 
+/* Simple alerts */
+.alert {
+  background: #fff8e1;
+  color: #7a5a00;
+  border: 1px solid #ffe0a3;
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+  box-shadow: var(--shadow-sm);
+}
+.alert.warn {
+  background: #fff3f2;
+  color: #7f1d1d;
+  border-color: #fecaca;
+}
+
 /* Upload Section */
-.uploader {
+.uploader, .status-panel {
   background: var(--bg-sidebar-item-hover);
   border-radius: var(--radius-md);
   padding: 16px;
@@ -212,6 +227,93 @@ html, body {
   margin-top: 8px;
   font-size: 12px;
   color: var(--text-muted);
+}
+
+.status-panel h3 {
+  font-size: 14px;
+  font-weight: 600;
+  margin-bottom: 12px;
+  color: var(--text-light);
+}
+
+.status-row { color: var(--text-muted); font-size: 12px; }
+
+.badge { display: inline-block; padding: 2px 8px; border-radius: 999px; border: 1px solid transparent; font-weight: 600; }
+.badge.ok { background: rgba(16,163,127,0.15); color: #a6ffdd; border-color: rgba(16,163,127,0.4); }
+.badge.err { background: rgba(244,67,54,0.15); color: #ffb3b0; border-color: rgba(244,67,54,0.4); }
+.badge.neutral { background: rgba(255,255,255,0.08); color: #d1d5db; border-color: rgba(255,255,255,0.15); }
+
+.status-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.action-btn {
+  background: var(--accent);
+  color: white;
+  border: none;
+  padding: 6px 10px;
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.action-btn:hover { background: var(--accent-hover); }
+.action-btn.danger { background: var(--danger); }
+.action-btn.danger:hover { background: var(--danger-hover); }
+.action-btn.warn { background: #eab308; color: black; }
+.action-btn.warn:hover { background: #d4a106; }
+
+.status-note {
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.recent-files h3 {
+  font-size: 14px;
+  font-weight: 600;
+  margin-bottom: 12px;
+  color: var(--text-light);
+}
+
+.recent-files-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.recent-file {
+  font-size: 12px;
+  color: var(--text-muted);
+  padding: 6px 8px;
+  background: rgba(255,255,255,0.05);
+  border: 1px solid var(--border-dark);
+  border-radius: var(--radius-sm);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.rf-name { color: var(--text-light); font-weight: 600; }
+.rf-meta { font-size: 11px; }
+.rf-actions { display:flex; gap: 6px; }
+
+.progress {
+  display: none;
+  width: 100%;
+  height: 8px;
+  background: rgba(255,255,255,0.08);
+  border-radius: 999px;
+  overflow: hidden;
+  margin-top: 8px;
+}
+.progress-bar {
+  height: 100%;
+  width: 0%;
+  background: var(--accent);
+  transition: width 0.3s ease;
 }
 
 /* Chat History */
