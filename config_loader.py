@@ -23,6 +23,10 @@ class AppConfig:
     openai_base_url: Optional[str]
     openai_api_key: Optional[str]
     disable_ssl: bool
+    # ALM Octane integration
+    octane_base_url: Optional[str]
+    octane_client_id: Optional[str]
+    octane_client_secret: Optional[str]
     # Confluence integration
     confluence_base_url: Optional[str]
     confluence_access_token: Optional[str]
@@ -44,6 +48,10 @@ def load_config() -> AppConfig:
     proxy_url = get_cfg('proxy_url', 'PROXY_URL', None)
     openai_base_url = get_cfg('openai_base_url', 'OPENAI_BASE_URL', None)
     openai_api_key = get_cfg('openai_api_key', 'OPENAI_API_KEY', None)
+    # Octane
+    octane_base_url = get_cfg('octane_base_url', 'OCTANE_BASE_URL', None)
+    octane_client_id = get_cfg('octane_client_id', 'OCTANE_CLIENT_ID', None)
+    octane_client_secret = get_cfg('octane_client_secret', 'OCTANE_CLIENT_SECRET', None)
     confluence_base_url = get_cfg('confluence_base_url', 'CONFLUENCE_BASE_URL', None)
     confluence_access_token = get_cfg('confluence_access_token', 'CONFLUENCE_ACCESS_TOKEN', None)
     disable_ssl_raw = get_cfg('disable_ssl', 'DISABLE_SSL', False)
@@ -65,6 +73,9 @@ def load_config() -> AppConfig:
         openai_base_url=openai_base_url or None,
         openai_api_key=openai_api_key or None,
         disable_ssl=disable_ssl,
+        octane_base_url=octane_base_url or None,
+        octane_client_id=octane_client_id or None,
+        octane_client_secret=octane_client_secret or None,
         confluence_base_url=confluence_base_url or None,
         confluence_access_token=confluence_access_token or None,
         mode=mode,

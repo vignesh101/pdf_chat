@@ -112,6 +112,21 @@ Notes and limits:
 - Access depends on your token’s permissions; some pages may be inaccessible.
 - HTML-to-text is best-effort, so some formatting/tables may be simplified.
 
+## Octane Chat (ALM Octane)
+
+This app includes an “Octane” chat mode that attempts to authenticate to ALM Octane using client credentials, capture cookies, fetch a small set of work items, cache their text locally, and answer questions grounded in those excerpts.
+
+- Configure `octane_base_url`, `octane_client_id`, and `octane_client_secret` in `config.toml` (or environment variables `OCTANE_BASE_URL`, `OCTANE_CLIENT_ID`, `OCTANE_CLIENT_SECRET`). The app honors global `proxy_url` and `disable_ssl`.
+- Retrieved Octane content is cached under `data/octane` as a separate FAISS index. Use “Clear Octane Cache” in the sidebar to reset it.
+
+Using it:
+- In the UI, click the “Octane” tab. Enter your Project ID and Workspace ID, adjust “Entities” and “Context k” if needed, then ask your question.
+- The server attempts a cookie-based or OAuth login automatically before fetching. A best-effort set of Octane endpoints is tried; results depend on your server version and permissions.
+
+Notes and limits:
+- Endpoints differ by Octane version/deployment; if no items are fetched, the chat will continue but with no Octane context.
+- Authentication is best-effort: the app tries `/authentication/sign_in` and common OAuth2 token endpoints. Cookies (if any) are reused for subsequent requests via the shared HTTP client.
+
 ## Notes
 
 - This app does not use the Vector Stores or Files APIs. It calls the Embeddings endpoint to build a local FAISS index under `data/` and uses Chat Completions for responses.

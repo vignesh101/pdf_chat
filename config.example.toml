@@ -12,6 +12,14 @@ openai_api_key = ""
 # Disable SSL verification for HTTP client (use only for trusted setups)
 disable_ssl = false
 
+# ALM Octane integration (optional)
+# Base URL of your ALM Octane site, e.g. "https://octane.example.com:8080"
+octane_base_url = ""
+# Client credentials (Client ID and Client Secret). These are used to attempt authentication
+# and capture session cookies for subsequent API requests.
+octane_client_id = ""
+octane_client_secret = ""
+
 # App mode (only 'chat' is supported)
 mode = "chat"
 

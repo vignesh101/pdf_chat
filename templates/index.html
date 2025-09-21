@@ -80,6 +80,7 @@
               <button id="btn-clear-all" type="button" class="action-btn danger">Clear All Data</button>
               <button id="btn-clear-web" type="button" class="action-btn danger" title="Clear cached web pages (Web RAG index)">Clear Web Cache</button>
               <button id="btn-clear-conf" type="button" class="action-btn danger" title="Clear cached Confluence pages (Confluence RAG index)">Clear Confluence Cache</button>
+              <button id="btn-clear-octane" type="button" class="action-btn danger" title="Clear cached Octane items (Octane RAG index)">Clear Octane Cache</button>
             </div>
             <div class="progress" id="rebuild-progress-wrap">
               <div id="rebuild-progress" class="progress-bar" style="width:0%"></div>
@@ -126,6 +127,7 @@
           <button id="tab-docs" class="tab-btn active">Docs</button>
           <button id="tab-web" class="tab-btn">Web</button>
           <button id="tab-conf" class="tab-btn">Confluence</button>
+          <button id="tab-octane" class="tab-btn">Octane</button>
         </div>
 
         <div class="chat-container">
@@ -153,9 +155,24 @@
               <input id="conf-k-ctx" type="number" value="5" min="1" max="10" style="width:56px; margin-left:6px;">
             </span>
           </div>
+          <div id="octane-options" class="octane-options" style="display:none; padding: 0 16px 8px 16px; font-size:12px; color: var(--muted);">
+            <span style="margin-right:10px;">Project ID:
+              <input id="octane-project-id" type="text" placeholder="e.g., 1001" style="width:120px; margin-left:6px;">
+            </span>
+            <span style="margin-right:10px;">Workspace ID:
+              <input id="octane-workspace-id" type="text" placeholder="e.g., 2001" style="width:120px; margin-left:6px;">
+            </span>
+            <span style="margin-right:10px;">Entities:
+              <input id="octane-max-results" type="number" value="5" min="1" max="10" style="width:56px; margin-left:6px;">
+            </span>
+            <span>Context k:
+              <input id="octane-k-ctx" type="number" value="5" min="1" max="10" style="width:56px; margin-left:6px;">
+            </span>
+          </div>
           <div id="messages-docs" class="messages"></div>
           <div id="messages-web" class="messages" style="display:none;"></div>
           <div id="messages-conf" class="messages" style="display:none;"></div>
+          <div id="messages-octane" class="messages" style="display:none;"></div>
           <div class="chat-input-container">
             <form id="chat-form" class="chat-form">
               <div class="input-wrapper">
@@ -182,6 +199,7 @@
       const messagesDocsEl = $("#messages-docs");
       const messagesWebEl = $("#messages-web");
       const messagesConfEl = $("#messages-conf");
+      const messagesOctEl = $("#messages-octane");
       const uploadForm = $("#upload-form");
       const chatForm = $("#chat-form");
       // Web options (DDG search controls)
@@ -204,6 +222,12 @@
       const inpConfSpaces = $('#conf-spaces');
       const inpConfMaxResults = $('#conf-max-results');
       const inpConfKCtx = $('#conf-k-ctx');
+      // Octane options
+      const octaneOptions = $('#octane-options');
+      const inpOctProjectId = $('#octane-project-id');
+      const inpOctWorkspaceId = $('#octane-workspace-id');
+      const inpOctMaxResults = $('#octane-max-results');
+      const inpOctKCtx = $('#octane-k-ctx');
       const uploadStatus = $("#upload-status");
       const dropzone = $("#dropzone");
       const btnClear = $('#btn-clear');
@@ -220,6 +244,7 @@
       const btnClearAll = $('#btn-clear-all');
       const btnClearWeb = $('#btn-clear-web');
       const btnClearConf = $('#btn-clear-conf');
+      const btnClearOctane = $('#btn-clear-octane');
       const progressWrap = $('#rebuild-progress-wrap');
       const progressBar = $('#rebuild-progress');
       const recentFilesList = $('#recent-files-list');
@@ -647,7 +672,8 @@
       function getMessagesEl() {
         if (activeTab === 'docs') return messagesDocsEl;
         if (activeTab === 'web') return messagesWebEl;
-        return messagesConfEl;
+        if (activeTab === 'conf') return messagesConfEl;
+        return messagesOctEl;
       }
 
       function messageElFor(m) {
@@ -863,10 +889,21 @@
         } catch (e) { console.error(e); }
       }
 
+      async function refreshMessagesOctane() {
+        try {
+          const res = await fetch('/octane/messages');
+          const data = await res.json();
+          if (!data.ok) return;
+          messagesOctEl.innerHTML = '';
+          (data.messages || []).forEach(m => appendMessageObj(m, messagesOctEl));
+        } catch (e) { console.error(e); }
+      }
+
       async function refreshCurrentMessages() {
         if (activeTab === 'docs') return refreshMessagesDocs();
         if (activeTab === 'web') return refreshMessagesWeb();
-        return refreshMessagesConf();
+        if (activeTab === 'conf') return refreshMessagesConf();
+        return refreshMessagesOctane();
       }
 
       let rebuildPoller = null;
@@ -1032,7 +1069,8 @@
           const isDocs = activeTab === 'docs';
           const isWeb = activeTab === 'web';
           const isConf = activeTab === 'conf';
-          const endpoint = isDocs ? '/chat_stream' : (isWeb ? '/webchat_stream' : '/confchat_stream');
+          const isOct = activeTab === 'octane';
+          const endpoint = isDocs ? '/chat_stream' : (isWeb ? '/webchat_stream' : (isConf ? '/confchat_stream' : '/octanechat_stream'));
           const payload = { message: text };
           // For Web chat, prefetch and show search info before streaming
           if (isWeb) {
@@ -1106,6 +1144,13 @@
             payload.max_results = mr;
             payload.k_ctx = kc;
             payload.spaces = (inpConfSpaces?.value || '').trim();
+          } else if (isOct) {
+            const mr = Math.max(1, Math.min(10, Number(inpOctMaxResults?.value || 5)));
+            const kc = Math.max(1, Math.min(10, Number(inpOctKCtx?.value || 5)));
+            payload.max_results = mr;
+            payload.k_ctx = kc;
+            payload.project_id = (inpOctProjectId?.value || '').trim();
+            payload.workspace_id = (inpOctWorkspaceId?.value || '').trim();
           }
           const res = await fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
           if (res.ok && res.body) {
@@ -1125,7 +1170,7 @@
             // After stream ends, persist the conversation on the server
             let committed = false;
             try {
-              const commitEndpoint = isDocs ? '/chat/commit' : (isWeb ? '/webchat/commit' : '/conf/commit');
+              const commitEndpoint = isDocs ? '/chat/commit' : (isWeb ? '/webchat/commit' : (isConf ? '/conf/commit' : '/octane/commit'));
               const saveRes = await fetch(commitEndpoint, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -1159,8 +1204,15 @@
               body.max_results = mr;
               body.k_ctx = kc;
               body.spaces = (inpConfSpaces?.value || '').trim();
+            } else if (isOct) {
+              const mr = Math.max(1, Math.min(10, Number(inpOctMaxResults?.value || 5)));
+              const kc = Math.max(1, Math.min(10, Number(inpOctKCtx?.value || 5)));
+              body.max_results = mr;
+              body.k_ctx = kc;
+              body.project_id = (inpOctProjectId?.value || '').trim();
+              body.workspace_id = (inpOctWorkspaceId?.value || '').trim();
             }
-            const r = await fetch(isDocs ? '/chat' : (isWeb ? '/webchat' : '/confchat'), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+            const r = await fetch(isDocs ? '/chat' : (isWeb ? '/webchat' : (isConf ? '/confchat' : '/octanechat')), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
             const dj = await r.json();
             if (dj.ok) { await refreshCurrentMessages(); }
             else { assistantBody.textContent = 'Error: ' + (dj.error || 'failed'); }
@@ -1201,7 +1253,7 @@
         const sure = confirm('Clear chat history for this session?');
         if (!sure) return;
         try {
-          const res = await fetch(activeTab === 'docs' ? '/clear' : (activeTab === 'web' ? '/web/clear' : '/conf/clear'), { method: 'POST' });
+          const res = await fetch(activeTab === 'docs' ? '/clear' : (activeTab === 'web' ? '/web/clear' : (activeTab === 'conf' ? '/conf/clear' : '/octane/clear')), { method: 'POST' });
           const data = await res.json();
           if (data.ok) {
             await refreshCurrentMessages();
@@ -1215,7 +1267,7 @@
 
       newChatBtn.addEventListener('click', async () => {
         try {
-          const res = await fetch(activeTab === 'docs' ? '/clear' : (activeTab === 'web' ? '/web/clear' : '/conf/clear'), { method: 'POST' });
+          const res = await fetch(activeTab === 'docs' ? '/clear' : (activeTab === 'web' ? '/web/clear' : (activeTab === 'conf' ? '/conf/clear' : '/octane/clear')), { method: 'POST' });
           const data = await res.json();
           if (data.ok) {
             await refreshCurrentMessages();
@@ -1231,35 +1283,58 @@
       const tabDocs = $('#tab-docs');
       const tabWeb = $('#tab-web');
       const tabConf = $('#tab-conf');
+      const tabOct = $('#tab-octane');
       function setActiveTab(tab) {
         activeTab = tab;
         if (tab === 'docs') {
           tabDocs.classList.add('active');
           tabWeb.classList.remove('active');
           tabConf.classList.remove('active');
+          tabOct.classList.remove('active');
           messagesDocsEl.style.display = '';
           messagesWebEl.style.display = 'none';
           messagesConfEl.style.display = 'none';
+          messagesOctEl.style.display = 'none';
           if (webOptions) webOptions.style.display = 'none';
           if (confOptions) confOptions.style.display = 'none';
+          if (octaneOptions) octaneOptions.style.display = 'none';
         } else {
           tabDocs.classList.remove('active');
           if (tab === 'web') {
             tabWeb.classList.add('active');
             tabConf.classList.remove('active');
+            tabOct.classList.remove('active');
             messagesWebEl.style.display = '';
             messagesDocsEl.style.display = 'none';
             messagesConfEl.style.display = 'none';
+            messagesOctEl.style.display = 'none';
             if (webOptions) webOptions.style.display = '';
             if (confOptions) confOptions.style.display = 'none';
+            if (octaneOptions) octaneOptions.style.display = 'none';
           } else {
-            tabConf.classList.add('active');
-            tabWeb.classList.remove('active');
-            messagesConfEl.style.display = '';
-            messagesDocsEl.style.display = 'none';
-            messagesWebEl.style.display = 'none';
-            if (webOptions) webOptions.style.display = 'none';
-            if (confOptions) confOptions.style.display = '';
+            if (tab === 'conf') {
+              tabConf.classList.add('active');
+              tabWeb.classList.remove('active');
+              tabOct.classList.remove('active');
+              messagesConfEl.style.display = '';
+              messagesDocsEl.style.display = 'none';
+              messagesWebEl.style.display = 'none';
+              messagesOctEl.style.display = 'none';
+              if (webOptions) webOptions.style.display = 'none';
+              if (confOptions) confOptions.style.display = '';
+              if (octaneOptions) octaneOptions.style.display = 'none';
+            } else {
+              tabOct.classList.add('active');
+              tabWeb.classList.remove('active');
+              tabConf.classList.remove('active');
+              messagesOctEl.style.display = '';
+              messagesDocsEl.style.display = 'none';
+              messagesWebEl.style.display = 'none';
+              messagesConfEl.style.display = 'none';
+              if (webOptions) webOptions.style.display = 'none';
+              if (confOptions) confOptions.style.display = 'none';
+              if (octaneOptions) octaneOptions.style.display = '';
+            }
           }
         }
         refreshCurrentMessages();
@@ -1267,6 +1342,7 @@
       tabDocs.addEventListener('click', () => setActiveTab('docs'));
       tabWeb.addEventListener('click', () => setActiveTab('web'));
       tabConf.addEventListener('click', () => setActiveTab('conf'));
+      tabOct.addEventListener('click', () => setActiveTab('octane'));
 
       // Initial load
       refreshMessagesDocs();
@@ -1392,6 +1468,26 @@
           statusNote.textContent = 'Confluence cache request failed.';
         } finally {
           btnClearConf.disabled = false;
+        }
+      });
+
+      btnClearOctane.addEventListener('click', async () => {
+        const sure = confirm('Clear cached Octane items (Octane RAG index)? This deletes the Octane FAISS index and metadata.');
+        if (!sure) return;
+        btnClearOctane.disabled = true;
+        statusNote.textContent = 'Clearing Octane cache...';
+        try {
+          const res = await fetch('/octane/index/clear_all', { method: 'POST' });
+          const data = await res.json();
+          if (data.ok) {
+            statusNote.textContent = 'Octane cache cleared.';
+          } else {
+            statusNote.textContent = 'Clear Octane cache failed: ' + (data.error || 'unknown error');
+          }
+        } catch (e) {
+          statusNote.textContent = 'Octane cache request failed.';
+        } finally {
+          btnClearOctane.disabled = false;
         }
       });
     </script>

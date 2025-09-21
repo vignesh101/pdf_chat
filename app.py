@@ -9,7 +9,9 @@ from openai_client import build_openai_client, build_httpx_client
 import embedding_store
 import web_embedding_store as web_store
 import confluence_embedding_store as conf_store
+import octane_embedding_store as oct_store
 from confluence_client import ConfluenceAPI
+from octane_client import OctaneAPI
 
 
 def create_app() -> Flask:
@@ -109,6 +111,14 @@ def create_app() -> Flask:
     except Exception:
         conf_api = None
     app.config['CONF_API'] = conf_api
+    # Optional Octane API client
+    oct_api = None
+    try:
+        if getattr(cfg, 'octane_base_url', None) and getattr(cfg, 'octane_client_id', None) and getattr(cfg, 'octane_client_secret', None):
+            oct_api = OctaneAPI(cfg.octane_base_url, cfg.octane_client_id, cfg.octane_client_secret, http_client)
+    except Exception:
+        oct_api = None
+    app.config['OCT_API'] = oct_api
     app.config['MODEL_NAME'] = cfg.model_name
     # Initialize local FAISS embedding store only if client is available
     try:
@@ -118,6 +128,8 @@ def create_app() -> Flask:
             web_store.init(client, embedding_model_name=cfg.embedding_model_name)
             # Initialize separate FAISS store for Confluence chat
             conf_store.init(client, embedding_model_name=cfg.embedding_model_name)
+            # Initialize separate FAISS store for Octane chat
+            oct_store.init(client, embedding_model_name=cfg.embedding_model_name)
     except Exception:
         # Do not block app startup; search/upload will surface errors
         pass
@@ -128,6 +140,7 @@ def create_app() -> Flask:
         session.setdefault('chat_history', [])
         session.setdefault('web_chat_history', [])
         session.setdefault('conf_chat_history', [])
+        session.setdefault('octane_chat_history', [])
         thread_id = None
         return render_template('index.html',
                                model_name=cfg.model_name,
@@ -136,6 +149,229 @@ def create_app() -> Flask:
                                disable_ssl=cfg.disable_ssl,
                                client_ready=bool(app.config.get('OPENAI_CLIENT')),
                                thread_id=thread_id)
+
+    # --- Octane: auth helper to acquire cookies ---
+    @app.post('/octane/auth')
+    def octane_auth():
+        oct_api = app.config.get('OCT_API')
+        if oct_api is None:
+            return jsonify({'ok': False, 'error': 'Octane is not configured. Set octane_base_url, octane_client_id and octane_client_secret in config.'}), 400
+        try:
+            res = oct_api.login()
+            # Track cookie names in session for visibility
+            session['octane_cookie_names'] = res.cookies
+            return jsonify({'ok': bool(res.ok), 'cookies': res.cookies, 'note': res.note})
+        except Exception as e:
+            return jsonify({'ok': False, 'error': str(e)}), 500
+
+    # --- Octane Chat: fetch items and chat ---
+    @app.post('/octanechat')
+    def octane_chat():
+        data = request.get_json(silent=True) or {}
+        message = (data.get('message') or '').strip()
+        if not message:
+            return jsonify({'ok': False, 'error': 'Empty message'}), 400
+        oct_api = app.config.get('OCT_API')
+        if oct_api is None:
+            return jsonify({'ok': False, 'error': 'Octane is not configured. Set octane config and restart.'}), 400
+        try:
+            max_results = int(data.get('max_results') or 5)
+        except Exception:
+            max_results = 5
+        try:
+            k_ctx = int(data.get('k_ctx') or 5)
+        except Exception:
+            k_ctx = 5
+        project_id = (data.get('project_id') or '').strip()
+        workspace_id = (data.get('workspace_id') or '').strip()
+        max_results = max(1, min(10, max_results))
+        k_ctx = max(1, min(10, k_ctx))
+
+        # Ensure cookies/auth and try to fetch items from Octane and index
+        try:
+            try:
+                oct_api.login()
+            except Exception:
+                pass
+            items = oct_api.fetch_sample_items(project_id, workspace_id, limit=max_results)
+            for it in items:
+                oct_store.add_item(it.get('key') or '', it.get('title'), it.get('text') or '')
+        except Exception:
+            # best-effort
+            items = []
+
+        try:
+            ctx_chunks_meta = oct_store.search_with_meta(message, k=k_ctx)
+        except Exception:
+            ctx_chunks_meta = []
+        context_text = "\n\n".join([
+            f"[Octane {i+1}] {it.get('file_name') or it.get('file_id')}\n{it.get('text', '')}"
+            for i, it in enumerate(ctx_chunks_meta)
+        ])
+        system_prompt = (
+            "You are a helpful assistant with access to ALM Octane item excerpts. "
+            "Use the provided Octane content to answer accurately. If the answer isn't present, say you aren't sure.\n\n"
+            + (f"Octane Content:\n{context_text}" if context_text else "No Octane content available.")
+        )
+        client = app.config.get('OPENAI_CLIENT')
+        if client is None:
+            return jsonify({'ok': False, 'error': 'OpenAI client not configured. Set OPENAI_API_KEY or update config.toml.'}), 500
+        try:
+            resp = client.chat.completions.create(
+                model=cfg.model_name,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": message},
+                ],
+            )
+            answer = resp.choices[0].message.content if resp and resp.choices else ""
+        except Exception as e:
+            return jsonify({'ok': False, 'error': str(e)}), 500
+
+        # Update history
+        hist = session.get('octane_chat_history', [])
+        hist.append({'id': f'user-{len(hist)+1}', 'role': 'user', 'text': message})
+        hist.append({
+            'id': f'assistant-{len(hist)+1}',
+            'role': 'assistant',
+            'text': answer,
+            'sources': [
+                {
+                    'file_id': it.get('file_id'),
+                    'file_name': it.get('file_name'),
+                    'score': it.get('score'),
+                    'text': (it.get('text') or '')[:app.config.get('MAX_SOURCE_PREVIEW', 300)],
+                }
+                for it in ctx_chunks_meta
+            ],
+        })
+        session['octane_chat_history'] = hist
+        return jsonify({'ok': True, 'messages': session.get('octane_chat_history', [])})
+
+    @app.post('/octanechat_stream')
+    def octane_chat_stream():
+        from flask import Response, stream_with_context
+        data = request.get_json(silent=True) or {}
+        message = (data.get('message') or '').strip()
+        if not message:
+            return jsonify({'ok': False, 'error': 'Empty message'}), 400
+        oct_api = app.config.get('OCT_API')
+        if oct_api is None:
+            return jsonify({'ok': False, 'error': 'Octane is not configured. Set octane config and restart.'}), 400
+        try:
+            max_results = int(data.get('max_results') or 5)
+        except Exception:
+            max_results = 5
+        try:
+            k_ctx = int(data.get('k_ctx') or 5)
+        except Exception:
+            k_ctx = 5
+        project_id = (data.get('project_id') or '').strip()
+        workspace_id = (data.get('workspace_id') or '').strip()
+        max_results = max(1, min(10, max_results))
+        k_ctx = max(1, min(10, k_ctx))
+
+        try:
+            try:
+                oct_api.login()
+            except Exception:
+                pass
+            items = oct_api.fetch_sample_items(project_id, workspace_id, limit=max_results)
+            for it in items:
+                oct_store.add_item(it.get('key') or '', it.get('title'), it.get('text') or '')
+        except Exception:
+            pass
+
+        try:
+            ctx_chunks_meta = oct_store.search_with_meta(message, k=k_ctx)
+        except Exception:
+            ctx_chunks_meta = []
+        context_text = "\n\n".join([
+            f"[Octane {i+1}] {it.get('file_name') or it.get('file_id')}\n{it.get('text', '')}"
+            for i, it in enumerate(ctx_chunks_meta)
+        ])
+        system_prompt = (
+            "You are a helpful assistant with access to ALM Octane item excerpts. "
+            "Use the provided Octane content to answer accurately. If the answer isn't present, say you aren't sure.\n\n"
+            + (f"Octane Content:\n{context_text}" if context_text else "No Octane content available.")
+        )
+        client = app.config.get('OPENAI_CLIENT')
+        if client is None:
+            return jsonify({'ok': False, 'error': 'OpenAI client not configured. Set OPENAI_API_KEY or update config.toml.'}), 500
+
+        try:
+            session['pending_octane_assistant'] = {
+                'sources': [
+                    {
+                        'file_id': it.get('file_id'),
+                        'file_name': it.get('file_name'),
+                        'score': it.get('score'),
+                        'text': (it.get('text') or '')[:app.config.get('MAX_SOURCE_PREVIEW', 300)],
+                    }
+                    for it in ctx_chunks_meta
+                ],
+            }
+        except Exception:
+            pass
+
+        def generate():
+            try:
+                stream = client.chat.completions.create(
+                    model=cfg.model_name,
+                    messages=[
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": message},
+                    ],
+                    stream=True,
+                )
+                for chunk in stream:
+                    try:
+                        delta = chunk.choices[0].delta
+                        content = getattr(delta, 'content', None) if delta is not None else None
+                    except Exception:
+                        content = None
+                    if content:
+                        yield content
+            except Exception as e:
+                yield f"\n[ERROR] {str(e)}"
+
+        return Response(stream_with_context(generate()), mimetype='text/plain; charset=utf-8')
+
+    @app.post('/octane/commit')
+    def octane_commit():
+        data = request.get_json(silent=True) or {}
+        question = (data.get('question') or '').strip()
+        answer = (data.get('answer') or '').strip()
+        if not question or not answer:
+            return jsonify({'ok': False, 'error': 'question and answer required'}), 400
+        try:
+            hist = session.get('octane_chat_history', [])
+            pending = session.get('pending_octane_assistant') or {}
+            sources = pending.get('sources') or []
+            hist.append({'id': f'user-{len(hist)+1}', 'role': 'user', 'text': question})
+            hist.append({'id': f'assistant-{len(hist)+1}', 'role': 'assistant', 'text': answer, 'sources': sources})
+            session['octane_chat_history'] = hist
+            session.pop('pending_octane_assistant', None)
+            return jsonify({'ok': True, 'messages': session.get('octane_chat_history', [])})
+        except Exception as e:
+            return jsonify({'ok': False, 'error': str(e)}), 500
+
+    @app.get('/octane/messages')
+    def octane_get_messages():
+        return jsonify({'ok': True, 'messages': session.get('octane_chat_history', [])})
+
+    @app.post('/octane/clear')
+    def octane_clear_messages():
+        session['octane_chat_history'] = []
+        return jsonify({'ok': True, 'messages': []})
+
+    @app.post('/octane/index/clear_all')
+    def octane_index_clear_all():
+        try:
+            st = oct_store.clear_all()
+            return jsonify({'ok': True, 'index': st})
+        except Exception as e:
+            return jsonify({'ok': False, 'error': str(e)}), 500
 
     @app.post('/upload')
     def upload():
