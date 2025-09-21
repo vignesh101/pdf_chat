@@ -142,13 +142,16 @@ def create_app() -> Flask:
         session.setdefault('conf_chat_history', [])
         session.setdefault('octane_chat_history', [])
         thread_id = None
-        return render_template('index.html',
-                               model_name=cfg.model_name,
-                               proxy_url=cfg.proxy_url,
-                               base_url=cfg.openai_base_url,
-                               disable_ssl=cfg.disable_ssl,
-                               client_ready=bool(app.config.get('OPENAI_CLIENT')),
-                               thread_id=thread_id)
+        return render_template(
+            'index.html',
+            model_name=cfg.model_name,
+            proxy_url=cfg.proxy_url,
+            base_url=cfg.openai_base_url,
+            disable_ssl=cfg.disable_ssl,
+            client_ready=bool(app.config.get('OPENAI_CLIENT')),
+            octane_ready=bool(app.config.get('OCT_API')),
+            thread_id=thread_id,
+        )
 
     # --- Octane: auth helper to acquire cookies ---
     @app.post('/octane/auth')

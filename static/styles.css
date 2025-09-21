@@ -477,7 +477,17 @@ html, body {
 }
 
 /* Sub-tabs */
-.sub-tabs { background: var(--bg-secondary); border-bottom: 1px solid var(--border-light); flex-wrap: wrap; overflow-x: auto; }
+/* Ensure all tabs remain visible on small screens by wrapping instead of horizontal scroll */
+.sub-tabs {
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border-light);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 16px 8px 16px;
+  flex-wrap: wrap;
+  overflow: visible;
+}
 .tab-btn {
   background: var(--bg-secondary);
   color: var(--text-secondary);
@@ -485,6 +495,8 @@ html, body {
   padding: 6px 10px;
   border-radius: var(--radius-sm);
   cursor: pointer;
+  /* Prevent buttons from shrinking so labels stay readable */
+  flex: 0 0 auto;
 }
 .tab-btn.active {
   background: var(--accent);

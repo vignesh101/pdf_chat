@@ -130,6 +130,11 @@
           <button id="tab-octane" class="tab-btn">Octane</button>
         </div>
 
+        <!-- Octane configuration notice (shown only when Octane tab active and not configured) -->
+        <div id="octane-notice" class="alert warn" role="alert" style="display:none; margin: 0 16px 8px 16px;">
+          ALM Octane is not configured. Set octane_base_url, octane_client_id, and octane_client_secret in config.toml (or environment), then restart the app.
+        </div>
+
         <div class="chat-container">
           <div id="web-options" class="web-options" style="display:none; padding: 0 16px 8px 16px; font-size:12px; color: var(--muted);">
             <span style="margin-right:10px;">Web pages:
@@ -195,6 +200,7 @@
 
     <script>
       const $ = (sel) => document.querySelector(sel);
+      const OCTANE_READY = {{ 'true' if octane_ready else 'false' }};
       let activeTab = 'docs';
       const messagesDocsEl = $("#messages-docs");
       const messagesWebEl = $("#messages-web");
@@ -231,6 +237,7 @@
       const uploadStatus = $("#upload-status");
       const dropzone = $("#dropzone");
       const btnClear = $('#btn-clear');
+      const octaneNotice = $('#octane-notice');
       const historyList = $('#history-list');
       const historyMeta = $('#history-meta');
       const btnSend = $('#btn-send');
@@ -1298,6 +1305,7 @@
           if (webOptions) webOptions.style.display = 'none';
           if (confOptions) confOptions.style.display = 'none';
           if (octaneOptions) octaneOptions.style.display = 'none';
+          if (octaneNotice) octaneNotice.style.display = 'none';
         } else {
           tabDocs.classList.remove('active');
           if (tab === 'web') {
@@ -1311,6 +1319,7 @@
             if (webOptions) webOptions.style.display = '';
             if (confOptions) confOptions.style.display = 'none';
             if (octaneOptions) octaneOptions.style.display = 'none';
+            if (octaneNotice) octaneNotice.style.display = 'none';
           } else {
             if (tab === 'conf') {
               tabConf.classList.add('active');
@@ -1323,6 +1332,7 @@
               if (webOptions) webOptions.style.display = 'none';
               if (confOptions) confOptions.style.display = '';
               if (octaneOptions) octaneOptions.style.display = 'none';
+              if (octaneNotice) octaneNotice.style.display = 'none';
             } else {
               tabOct.classList.add('active');
               tabWeb.classList.remove('active');
@@ -1334,6 +1344,7 @@
               if (webOptions) webOptions.style.display = 'none';
               if (confOptions) confOptions.style.display = 'none';
               if (octaneOptions) octaneOptions.style.display = '';
+              if (octaneNotice) octaneNotice.style.display = OCTANE_READY ? 'none' : '';
             }
           }
         }
