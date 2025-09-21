@@ -289,36 +289,47 @@ def create_app() -> Flask:
             except Exception:
                 pass
             return results
-        # Prepare kwargs with proxy and SSL behavior if supported
-        kwargs: Dict[str, Any] = {
+        # Prepare kwargs with proxy and SSL behavior if supported, accounting for ddgs version differences
+        base_kwargs: Dict[str, Any] = {
             'timeout': 30.0,
             'headers': {'User-Agent': 'document-chat/1.0 (+https://localhost)'},
         }
-        if getattr(cfg, 'proxy_url', None):
-            # DDGS expects requests/httpx-style proxies value (str or dict)
-            kwargs['proxy'] = cfg.proxy_url
-        # Some ddgs versions accept 'verify'; try it first, then fallback
-        try:
-            if getattr(cfg, 'disable_ssl', False):
-                kwargs_with_verify = dict(kwargs)
-                kwargs_with_verify['verify'] = False
-            else:
-                kwargs_with_verify = dict(kwargs)
+        proxy_val = getattr(cfg, 'proxy_url', None) or None
 
-            with DDGS(**kwargs_with_verify) as ddgs:
-                for item in ddgs.text(query, region="wt-wt", safesearch="moderate", timelimit=None, max_results=max_results):
-                    try:
-                        url = (item.get('href') or '').strip()
-                        title = (item.get('title') or '').strip()
-                        if url:
-                            results.append({'url': url, 'title': title})
-                    except Exception:
-                        continue
-        except TypeError:
-            # 'verify' not supported by this ddgs version; retry without it
+        # Build a list of argument variants to try, to support ddgs versions
+        # that expect either 'proxies' (modern) or 'proxy' (legacy), and
+        # those that do or do not accept 'verify'.
+        attempts: List[Dict[str, Any]] = []
+
+        def add_attempt(proxy_key: str | None, include_verify: bool) -> None:
+            kw = dict(base_kwargs)
+            if proxy_key and proxy_val:
+                kw[proxy_key] = proxy_val
+            if include_verify and getattr(cfg, 'disable_ssl', False):
+                kw['verify'] = False
+            attempts.append(kw)
+
+        # Prefer modern API names first
+        add_attempt('proxies', True)
+        add_attempt('proxies', False)
+        # Fall back to legacy param name
+        add_attempt('proxy', True)
+        add_attempt('proxy', False)
+        # As a last resort, try without any proxy configured
+        add_attempt(None, True)
+        add_attempt(None, False)
+
+        last_err: Exception | None = None
+        for kw in attempts:
             try:
-                with DDGS(**kwargs) as ddgs:
-                    for item in ddgs.text(query, region="wt-wt", safesearch="moderate", timelimit=None, max_results=max_results):
+                with DDGS(**kw) as ddgs:
+                    for item in ddgs.text(
+                        query,
+                        region="wt-wt",
+                        safesearch="moderate",
+                        timelimit=None,
+                        max_results=max_results,
+                    ):
                         try:
                             url = (item.get('href') or '').strip()
                             title = (item.get('title') or '').strip()
@@ -326,17 +337,21 @@ def create_app() -> Flask:
                                 results.append({'url': url, 'title': title})
                         except Exception:
                             continue
+                # If we succeeded with this kw set, stop trying further variants
+                last_err = None
+                break
+            except TypeError as e:
+                # Likely due to unexpected keyword (e.g., 'verify', 'proxies', or 'proxy')
+                last_err = e
+                continue
             except Exception as e:
-                try:
-                    _DDG_STATUS["ok"] = False
-                    _DDG_STATUS["note"] = f"search failed: {str(e)[:140]}"
-                except Exception:
-                    pass
-        except Exception as e:
-            # Any other runtime failure -> no results
+                last_err = e
+                break
+
+        if last_err is not None and not results:
             try:
                 _DDG_STATUS["ok"] = False
-                _DDG_STATUS["note"] = f"search failed: {str(e)[:140]}"
+                _DDG_STATUS["note"] = f"search failed: {str(last_err)[:140]}"
             except Exception:
                 pass
         # Mark status if not already set
