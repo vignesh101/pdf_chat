@@ -344,14 +344,35 @@ def create_app() -> Flask:
             k_ctx = int(data.get('k_ctx') or 5)
         except Exception:
             k_ctx = 5
+        # Toggle for using web search (DuckDuckGo)
+        search_enabled = True
+        try:
+            se = data.get('search_enabled')
+            if isinstance(se, bool):
+                search_enabled = se
+            elif isinstance(se, (int,)):
+                search_enabled = bool(se)
+            elif isinstance(se, str):
+                search_enabled = se.strip().lower() in ('1', 'true', 'yes', 'on')
+        except Exception:
+            pass
         # Clamp
         max_results = max(1, min(10, max_results))
         k_ctx = max(1, min(10, k_ctx))
 
         # Build candidate URLs via DDG + any URLs present in the message
-        ddg_hits = _ddg_search(message, max_results=max_results)
+        ddg_hits = _ddg_search(message, max_results=max_results) if search_enabled else []
         ddg_urls = [h.get('url') for h in ddg_hits if isinstance(h.get('url'), str)]
-        urls = list(dict.fromkeys((_extract_urls_from_text(message) + ddg_urls)))[:max_results]
+        typed_urls = _extract_urls_from_text(message)
+        urls = list(dict.fromkeys((typed_urls + ddg_urls)))[:max_results]
+
+        # Record search context for UI visibility
+        search_info = {
+            'engine': 'DuckDuckGo' if search_enabled else 'Manual',
+            'query': message,
+            'results': ddg_hits,
+            'used_urls': urls,
+        }
 
         # Fetch pages and index into web-only FAISS store
         web_pages = _fetch_urls_text(urls)
@@ -406,6 +427,7 @@ def create_app() -> Flask:
                 }
                 for it in ctx_chunks_meta
             ],
+            'search': search_info,
         })
         session['web_chat_history'] = hist
         return jsonify({'ok': True, 'messages': session.get('web_chat_history', [])})
@@ -662,12 +684,33 @@ def create_app() -> Flask:
             k_ctx = int(data.get('k_ctx') or 5)
         except Exception:
             k_ctx = 5
+        # Toggle for using web search (DuckDuckGo)
+        search_enabled = True
+        try:
+            se = data.get('search_enabled')
+            if isinstance(se, bool):
+                search_enabled = se
+            elif isinstance(se, (int,)):
+                search_enabled = bool(se)
+            elif isinstance(se, str):
+                search_enabled = se.strip().lower() in ('1', 'true', 'yes', 'on')
+        except Exception:
+            pass
         max_results = max(1, min(10, max_results))
         k_ctx = max(1, min(10, k_ctx))
 
-        ddg_hits = _ddg_search(message, max_results=max_results)
+        ddg_hits = _ddg_search(message, max_results=max_results) if search_enabled else []
         ddg_urls = [h.get('url') for h in ddg_hits if isinstance(h.get('url'), str)]
-        urls = list(dict.fromkeys((_extract_urls_from_text(message) + ddg_urls)))[:max_results]
+        typed_urls = _extract_urls_from_text(message)
+        urls = list(dict.fromkeys((typed_urls + ddg_urls)))[:max_results]
+
+        # Record search context for UI visibility
+        search_info = {
+            'engine': 'DuckDuckGo' if search_enabled else 'Manual',
+            'query': message,
+            'results': ddg_hits,
+            'used_urls': urls,
+        }
 
         web_pages = _fetch_urls_text(urls)
         try:
@@ -704,6 +747,7 @@ def create_app() -> Flask:
                     }
                     for it in ctx_chunks_meta
                 ],
+                'search': search_info,
             }
         except Exception:
             pass
@@ -731,6 +775,44 @@ def create_app() -> Flask:
 
         return Response(stream_with_context(generate()), mimetype='text/plain; charset=utf-8')
 
+    @app.post('/web/search_info')
+    def web_search_info():
+        data = request.get_json(silent=True) or {}
+        message = (data.get('message') or '').strip()
+        if not message:
+            return jsonify({'ok': False, 'error': 'Empty message'}), 400
+        try:
+            max_results = int(data.get('max_results') or 5)
+        except Exception:
+            max_results = 5
+        max_results = max(1, min(10, max_results))
+        # Toggle for using web search (DuckDuckGo)
+        search_enabled = True
+        try:
+            se = data.get('search_enabled')
+            if isinstance(se, bool):
+                search_enabled = se
+            elif isinstance(se, (int,)):
+                search_enabled = bool(se)
+            elif isinstance(se, str):
+                search_enabled = se.strip().lower() in ('1', 'true', 'yes', 'on')
+        except Exception:
+            pass
+        try:
+            ddg_hits = _ddg_search(message, max_results=max_results) if search_enabled else []
+        except Exception:
+            ddg_hits = []
+        ddg_urls = [h.get('url') for h in ddg_hits if isinstance(h.get('url'), str)]
+        typed_urls = _extract_urls_from_text(message)
+        urls = list(dict.fromkeys((typed_urls + ddg_urls)))[:max_results]
+        search_info = {
+            'engine': 'DuckDuckGo' if search_enabled else 'Manual',
+            'query': message,
+            'results': ddg_hits,
+            'used_urls': urls,
+        }
+        return jsonify({'ok': True, 'search': search_info})
+
     @app.post('/web/index/clear_all')
     def web_index_clear_all():
         try:
@@ -750,8 +832,12 @@ def create_app() -> Flask:
             hist = session.get('web_chat_history', [])
             pending = session.get('pending_web_assistant') or {}
             sources = pending.get('sources') or []
+            search_info = pending.get('search') or None
             hist.append({'id': f'user-{len(hist)+1}', 'role': 'user', 'text': question})
-            hist.append({'id': f'assistant-{len(hist)+1}', 'role': 'assistant', 'text': answer, 'sources': sources})
+            msg = {'id': f'assistant-{len(hist)+1}', 'role': 'assistant', 'text': answer, 'sources': sources}
+            if search_info is not None:
+                msg['search'] = search_info
+            hist.append(msg)
             session['web_chat_history'] = hist
             session.pop('pending_web_assistant', None)
             return jsonify({'ok': True, 'messages': session.get('web_chat_history', [])})

@@ -136,6 +136,11 @@
             <span>Context k:
               <input id="web-k-ctx" type="number" value="5" min="1" max="10" style="width:56px; margin-left:6px;">
             </span>
+            <span style="margin-left:12px;">Web search:
+              <label style="margin-left:6px; cursor:pointer;">
+                <input id="web-search-enabled" type="checkbox" checked style="vertical-align:middle; margin-right:4px;"> enable
+              </label>
+            </span>
           </div>
           <div id="conf-options" class="conf-options" style="display:none; padding: 0 16px 8px 16px; font-size:12px; color: var(--muted);">
             <span style="margin-right:10px;">Spaces:
@@ -183,6 +188,17 @@
       const webOptions = $('#web-options');
       const inpWebMaxResults = $('#web-max-results');
       const inpWebKCtx = $('#web-k-ctx');
+      const chkWebSearchEnabled = $('#web-search-enabled');
+      // Persist web search toggle in localStorage
+      if (chkWebSearchEnabled) {
+        try {
+          const saved = localStorage.getItem('web.search_enabled');
+          if (saved !== null) chkWebSearchEnabled.checked = saved === '1';
+        } catch (_) {}
+        chkWebSearchEnabled.addEventListener('change', () => {
+          try { localStorage.setItem('web.search_enabled', chkWebSearchEnabled.checked ? '1' : '0'); } catch (_) {}
+        });
+      }
       // Confluence options
       const confOptions = $('#conf-options');
       const inpConfSpaces = $('#conf-spaces');
@@ -218,6 +234,11 @@
       function escapeHtml(str) {
         const map = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
         return (str || '').replace(/[&<>"']/g, (ch) => map[ch]);
+      }
+
+      // Basic URL guard for http(s) links
+      function isHttpUrl(u) {
+        try { return /^https?:\/\//i.test((u || '').trim()); } catch (_) { return false; }
       }
 
       // Enhanced Markdown -> HTML rendering for readable output
@@ -656,6 +677,43 @@
         tools.appendChild(copyBtn);
         bubble.appendChild(body);
         bubble.appendChild(tools);
+        // Show web search context if present (Web chat)
+        if (m.role !== 'user' && m.search && Array.isArray(m.search.used_urls) && m.search.used_urls.length) {
+          const details = document.createElement('details');
+          details.className = 'sources';
+          const summary = document.createElement('summary');
+          const engine = (m.search.engine || 'Web');
+          summary.textContent = `Search (${engine}: ${m.search.used_urls.length})`;
+          details.appendChild(summary);
+          const list = document.createElement('ol');
+          list.className = 'sources-list';
+          const titleMap = new Map();
+          try {
+            (m.search.results || []).forEach(r => { if (r && r.url) titleMap.set(r.url, r.title || ''); });
+          } catch (_) {}
+          m.search.used_urls.forEach((url) => {
+            const li = document.createElement('li');
+            li.className = 'source-item';
+            const meta = document.createElement('div');
+            meta.className = 'meta';
+            if (isHttpUrl(url)) {
+              const a = document.createElement('a');
+              a.href = url;
+              a.target = '_blank';
+              a.rel = 'noopener';
+              a.textContent = titleMap.get(url) || url;
+              meta.appendChild(a);
+            } else {
+              meta.textContent = url || 'unknown';
+            }
+            li.appendChild(meta);
+            list.appendChild(li);
+          });
+          details.appendChild(list);
+          bubble.appendChild(details);
+        }
+
+        // Show sources panel with clickable links
         if (m.role !== 'user' && Array.isArray(m.sources) && m.sources.length) {
           const details = document.createElement('details');
           details.className = 'sources';
@@ -670,7 +728,18 @@
             const meta = document.createElement('div');
             meta.className = 'meta';
             const file = s.file_name ? s.file_name : (s.file_id || 'local');
-            meta.textContent = `${file}  •  score: ${typeof s.score === 'number' ? s.score.toFixed(3) : s.score}`;
+            const scoreText = ` • score: ${typeof s.score === 'number' ? s.score.toFixed(3) : s.score}`;
+            if (s.file_id && isHttpUrl(s.file_id)) {
+              const a = document.createElement('a');
+              a.href = s.file_id;
+              a.target = '_blank';
+              a.rel = 'noopener';
+              a.textContent = file;
+              meta.appendChild(a);
+              meta.appendChild(document.createTextNode(scoreText));
+            } else {
+              meta.textContent = `${file}${scoreText}`;
+            }
             const preview = document.createElement('div');
             preview.className = 'preview';
             preview.textContent = (s.text || '').slice(0, 500);
@@ -952,11 +1021,61 @@
           const isConf = activeTab === 'conf';
           const endpoint = isDocs ? '/chat_stream' : (isWeb ? '/webchat_stream' : '/confchat_stream');
           const payload = { message: text };
+          // For Web chat, prefetch and show search info before streaming
+          if (isWeb) {
+            try {
+              const mrPrev = Math.max(1, Math.min(10, Number(inpWebMaxResults?.value || 5)));
+              const enabled = !!(chkWebSearchEnabled?.checked ?? true);
+              const prevRes = await fetch('/web/search_info', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ message: text, max_results: mrPrev, search_enabled: enabled })
+              });
+              const prevDj = await prevRes.json();
+              if (prevDj && prevDj.ok && prevDj.search) {
+                const bubble = assistantLive.querySelector('.bubble');
+                const details = document.createElement('details');
+                details.className = 'sources';
+                const summary = document.createElement('summary');
+                const engine = (prevDj.search.engine || 'Web');
+                const used = Array.isArray(prevDj.search.used_urls) ? prevDj.search.used_urls : [];
+                summary.textContent = `Search (${engine}: ${used.length})`;
+                details.appendChild(summary);
+                const list = document.createElement('ol');
+                list.className = 'sources-list';
+                const titleMap = new Map();
+                try { (prevDj.search.results || []).forEach(r => { if (r && r.url) titleMap.set(r.url, r.title || ''); }); } catch (_) {}
+                used.forEach((url) => {
+                  const li = document.createElement('li');
+                  li.className = 'source-item';
+                  const meta = document.createElement('div');
+                  meta.className = 'meta';
+                  if (isHttpUrl(url)) {
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.target = '_blank';
+                    a.rel = 'noopener';
+                    a.textContent = titleMap.get(url) || url;
+                    meta.appendChild(a);
+                  } else {
+                    meta.textContent = url || 'unknown';
+                  }
+                  li.appendChild(meta);
+                  list.appendChild(li);
+                });
+                if (used.length > 0) {
+                  details.appendChild(list);
+                  bubble.appendChild(details);
+                }
+              }
+            } catch (_) { /* non-fatal */ }
+          }
           if (isWeb) {
             const mr = Math.max(1, Math.min(10, Number(inpWebMaxResults?.value || 5)));
             const kc = Math.max(1, Math.min(10, Number(inpWebKCtx?.value || 5)));
             payload.max_results = mr;
             payload.k_ctx = kc;
+            payload.search_enabled = !!(chkWebSearchEnabled?.checked ?? true);
           } else if (isConf) {
             const mr = Math.max(1, Math.min(10, Number(inpConfMaxResults?.value || 5)));
             const kc = Math.max(1, Math.min(10, Number(inpConfKCtx?.value || 5)));
@@ -1009,6 +1128,7 @@
               const kc = Math.max(1, Math.min(10, Number(inpWebKCtx?.value || 5)));
               body.max_results = mr;
               body.k_ctx = kc;
+              body.search_enabled = !!(chkWebSearchEnabled?.checked ?? true);
             } else if (isConf) {
               const mr = Math.max(1, Math.min(10, Number(inpConfMaxResults?.value || 5)));
               const kc = Math.max(1, Math.min(10, Number(inpConfKCtx?.value || 5)));
