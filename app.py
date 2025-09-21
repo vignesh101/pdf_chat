@@ -265,15 +265,29 @@ def create_app() -> Flask:
                 pass
         return out
 
+    # Track last DuckDuckGo search status for diagnostics
+    _DDG_STATUS: Dict[str, Any] = {"ok": None, "note": None}
+
     def _ddg_search(query: str, max_results: int = 5) -> List[Dict[str, str]]:
         """DuckDuckGo search using duckduckgo_search (ddgs). Honors proxy and SSL settings.
 
-        Returns list of {url,title}.
+        Returns list of {url,title} and sets _DDG_STATUS for diagnostics.
         """
         results: List[Dict[str, str]] = []
+        # Reset status for this call
+        try:
+            _DDG_STATUS["ok"] = None
+            _DDG_STATUS["note"] = None
+        except Exception:
+            pass
         try:
             from duckduckgo_search import DDGS  # type: ignore
         except Exception:
+            try:
+                _DDG_STATUS["ok"] = False
+                _DDG_STATUS["note"] = "duckduckgo_search not installed or failed to import"
+            except Exception:
+                pass
             return results
         # Prepare kwargs with proxy and SSL behavior if supported
         kwargs: Dict[str, Any] = {
@@ -312,10 +326,25 @@ def create_app() -> Flask:
                                 results.append({'url': url, 'title': title})
                         except Exception:
                             continue
+            except Exception as e:
+                try:
+                    _DDG_STATUS["ok"] = False
+                    _DDG_STATUS["note"] = f"search failed: {str(e)[:140]}"
+                except Exception:
+                    pass
+        except Exception as e:
+            # Any other runtime failure -> no results
+            try:
+                _DDG_STATUS["ok"] = False
+                _DDG_STATUS["note"] = f"search failed: {str(e)[:140]}"
             except Exception:
                 pass
+        # Mark status if not already set
+        try:
+            if _DDG_STATUS.get("ok") is None:
+                _DDG_STATUS["ok"] = True
+                _DDG_STATUS["note"] = "0 results" if not results else None
         except Exception:
-            # Any other runtime failure -> no results
             pass
         return results
 
@@ -372,6 +401,7 @@ def create_app() -> Flask:
             'query': message,
             'results': ddg_hits,
             'used_urls': urls,
+            'status': dict(_DDG_STATUS) if search_enabled else {'ok': True, 'note': None},
         }
 
         # Fetch pages and index into web-only FAISS store
@@ -710,6 +740,7 @@ def create_app() -> Flask:
             'query': message,
             'results': ddg_hits,
             'used_urls': urls,
+            'status': dict(_DDG_STATUS) if search_enabled else {'ok': True, 'note': None},
         }
 
         web_pages = _fetch_urls_text(urls)
@@ -810,6 +841,7 @@ def create_app() -> Flask:
             'query': message,
             'results': ddg_hits,
             'used_urls': urls,
+            'status': dict(_DDG_STATUS) if search_enabled else {'ok': True, 'note': None},
         }
         return jsonify({'ok': True, 'search': search_info})
 

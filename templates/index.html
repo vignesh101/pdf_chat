@@ -678,20 +678,33 @@
         bubble.appendChild(body);
         bubble.appendChild(tools);
         // Show web search context if present (Web chat)
-        if (m.role !== 'user' && m.search && Array.isArray(m.search.used_urls) && m.search.used_urls.length) {
+        if (m.role !== 'user' && m.search) {
           const details = document.createElement('details');
           details.className = 'sources';
           const summary = document.createElement('summary');
           const engine = (m.search.engine || 'Web');
-          summary.textContent = `Search (${engine}: ${m.search.used_urls.length})`;
+          const usedCount = Array.isArray(m.search.used_urls) ? m.search.used_urls.length : 0;
+          summary.textContent = `Search (${engine}: ${usedCount})`;
           details.appendChild(summary);
+          // Diagnostics/warning
+          try {
+            const status = m.search.status || {};
+            const note = (typeof status.note === 'string' && status.note) ? status.note : null;
+            const ok = (typeof status.ok === 'boolean') ? status.ok : true;
+            if (usedCount === 0 || !ok || note) {
+              const warn = document.createElement('div');
+              warn.className = 'note warn';
+              warn.textContent = note ? `Web search: ${note}` : 'Web search returned no URLs. Paste a URL or check proxy/SSL settings.';
+              details.appendChild(warn);
+            }
+          } catch (_) {}
           const list = document.createElement('ol');
           list.className = 'sources-list';
           const titleMap = new Map();
           try {
             (m.search.results || []).forEach(r => { if (r && r.url) titleMap.set(r.url, r.title || ''); });
           } catch (_) {}
-          m.search.used_urls.forEach((url) => {
+          (m.search.used_urls || []).forEach((url) => {
             const li = document.createElement('li');
             li.className = 'source-item';
             const meta = document.createElement('div');
@@ -709,7 +722,7 @@
             li.appendChild(meta);
             list.appendChild(li);
           });
-          details.appendChild(list);
+          if (usedCount > 0) details.appendChild(list);
           bubble.appendChild(details);
         }
 
@@ -1045,6 +1058,18 @@
                 list.className = 'sources-list';
                 const titleMap = new Map();
                 try { (prevDj.search.results || []).forEach(r => { if (r && r.url) titleMap.set(r.url, r.title || ''); }); } catch (_) {}
+                // Diagnostics: show a warning if no URLs or search error
+                try {
+                  const status = prevDj.search.status || {};
+                  const note = (typeof status.note === 'string' && status.note) ? status.note : null;
+                  const ok = (typeof status.ok === 'boolean') ? status.ok : true;
+                  if (used.length === 0 || !ok || note) {
+                    const warn = document.createElement('div');
+                    warn.className = 'note warn';
+                    warn.textContent = note ? `Web search: ${note}` : 'Web search returned no URLs. Paste a URL or check proxy/SSL settings.';
+                    details.appendChild(warn);
+                  }
+                } catch (_) {}
                 used.forEach((url) => {
                   const li = document.createElement('li');
                   li.className = 'source-item';
@@ -1063,10 +1088,9 @@
                   li.appendChild(meta);
                   list.appendChild(li);
                 });
-                if (used.length > 0) {
-                  details.appendChild(list);
-                  bubble.appendChild(details);
-                }
+                // Always append the details panel so diagnostics are visible
+                if (used.length > 0) { details.appendChild(list); }
+                bubble.appendChild(details);
               }
             } catch (_) { /* non-fatal */ }
           }

@@ -155,6 +155,22 @@ html, body {
   border-color: #fecaca;
 }
 
+/* Inline notes (used inside message bubbles) */
+.note {
+  margin-top: 6px;
+  background: #fff8e1;
+  color: #7a5a00;
+  border: 1px solid #ffe0a3;
+  border-radius: var(--radius-sm);
+  padding: 8px 10px;
+  font-size: 12px;
+}
+.note.warn {
+  background: #fff3f2;
+  color: #7f1d1d;
+  border-color: #fecaca;
+}
+
 /* Upload Section */
 .uploader, .status-panel {
   background: var(--bg-sidebar-item-hover);
