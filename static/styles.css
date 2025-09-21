@@ -396,6 +396,9 @@ html, body {
   line-height: 1.4;
   color: var(--text-light);
   margin-bottom: 4px;
+  /* Prevent long URLs/tokens from breaking layout */
+  word-break: break-word;
+  overflow-wrap: anywhere;
 }
 
 .history-timestamp {

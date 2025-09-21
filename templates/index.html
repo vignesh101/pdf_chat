@@ -883,6 +883,8 @@
           if (!data.ok) return;
           messagesWebEl.innerHTML = '';
           (data.messages || []).forEach(m => appendMessageObj(m, messagesWebEl));
+          // Keep sidebar history in sync with active tab
+          renderHistoryList(data.messages || []);
         } catch (e) { console.error(e); }
       }
 
@@ -893,6 +895,8 @@
           if (!data.ok) return;
           messagesConfEl.innerHTML = '';
           (data.messages || []).forEach(m => appendMessageObj(m, messagesConfEl));
+          // Keep sidebar history in sync with active tab
+          renderHistoryList(data.messages || []);
         } catch (e) { console.error(e); }
       }
 
@@ -903,6 +907,8 @@
           if (!data.ok) return;
           messagesOctEl.innerHTML = '';
           (data.messages || []).forEach(m => appendMessageObj(m, messagesOctEl));
+          // Keep sidebar history in sync with active tab
+          renderHistoryList(data.messages || []);
         } catch (e) { console.error(e); }
       }
 
