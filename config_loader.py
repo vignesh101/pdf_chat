@@ -34,6 +34,10 @@ class AppConfig:
     model_name: str
     embedding_model_name: Optional[str]
     secret_key: Optional[str]
+    # Local TTS (Coqui TTS)
+    coqui_tts_model: Optional[str]
+    coqui_tts_device: Optional[str]
+    coqui_tts_language: Optional[str]
 
 
 def load_config() -> AppConfig:
@@ -61,6 +65,9 @@ def load_config() -> AppConfig:
     model_name = get_cfg('model_name', 'MODEL_NAME', 'gpt-4o-mini')
     embedding_model_name = get_cfg('embedding_model_name', 'EMBEDDING_MODEL_NAME', 'text-embedding-3-small')
     secret_key = os.environ.get('SECRET_KEY')
+    coqui_tts_model = get_cfg('coqui_tts_model', 'COQUI_TTS_MODEL', None)
+    coqui_tts_device = get_cfg('coqui_tts_device', 'COQUI_TTS_DEVICE', None)
+    coqui_tts_language = get_cfg('coqui_tts_language', 'COQUI_TTS_LANGUAGE', None)
 
     disable_ssl = False
     if isinstance(disable_ssl_raw, str):
@@ -82,4 +89,7 @@ def load_config() -> AppConfig:
         model_name=str(model_name),
         embedding_model_name=str(embedding_model_name) if embedding_model_name else None,
         secret_key=secret_key,
+        coqui_tts_model=coqui_tts_model or None,
+        coqui_tts_device=coqui_tts_device or None,
+        coqui_tts_language=coqui_tts_language or None,
     )

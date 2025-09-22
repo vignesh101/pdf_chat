@@ -128,6 +128,7 @@
           <button id="tab-web" class="tab-btn">Web</button>
           <button id="tab-conf" class="tab-btn">Confluence</button>
           <button id="tab-octane" class="tab-btn">Octane</button>
+          <button id="tab-voice" class="tab-btn">Voice</button>
         </div>
 
         <!-- Octane configuration notice (shown only when Octane tab active and not configured) -->
@@ -178,6 +179,48 @@
           <div id="messages-web" class="messages" style="display:none;"></div>
           <div id="messages-conf" class="messages" style="display:none;"></div>
           <div id="messages-octane" class="messages" style="display:none;"></div>
+          <div id="voice-pane" style="display:none; padding: 16px;">
+            <div style="margin-bottom: 12px; font-size:13px; color: var(--text-secondary);">
+              Clone a voice from a short sample and synthesize speech from text. Voice cloning requires uploading a clear sample (10–30s).
+            </div>
+            <div style="display:flex; gap:16px; flex-wrap: wrap; align-items:flex-start;">
+              <div style="flex:1; min-width:280px;">
+                <h3 style="margin: 6px 0 8px 0;">Sample Upload</h3>
+                <div style="display:flex; gap:8px; align-items:center;">
+                  <input id="voice-sample-file" type="file" accept="audio/*" />
+                  <button id="btn-voice-upload" type="button" class="action-btn">Upload Sample</button>
+                  <button id="btn-voice-clear" type="button" class="action-btn danger">Clear Voice Data</button>
+                </div>
+                <div id="voice-status" class="upload-status" style="margin-top:6px;">No sample uploaded.</div>
+              </div>
+              <div style="flex:2; min-width:320px;">
+                <h3 style="margin: 6px 0 8px 0;">Text To Speech</h3>
+                <div style="display:flex; gap:8px; align-items:center; margin-bottom:8px; flex-wrap:wrap;">
+                  <label>Voice:
+                    <select id="voice-voice-name" style="margin-left:6px;">
+                      <option value="alloy">alloy</option>
+                      <option value="verse">verse</option>
+                      <option value="aria">aria</option>
+                      <option value="sage">sage</option>
+                    </select>
+                  </label>
+                  <label style="margin-left:12px;">Format:
+                    <select id="voice-audio-format" style="margin-left:6px;">
+                      <option value="mp3">mp3</option>
+                      <option value="wav">wav</option>
+                      <option value="ogg">ogg</option>
+                    </select>
+                  </label>
+                </div>
+                <textarea id="voice-tts-text" rows="3" placeholder="Type text to synthesize..." style="width:100%;"></textarea>
+                <div style="margin-top:8px; display:flex; gap:8px; align-items:center;">
+                  <button id="btn-voice-say" type="button" class="action-btn">Synthesize</button>
+                  <audio id="voice-audio" controls style="flex:1; max-width: 100%;"></audio>
+                </div>
+                <div id="voice-note" class="upload-status" style="margin-top:6px;"></div>
+              </div>
+            </div>
+          </div>
           <div class="chat-input-container">
             <form id="chat-form" class="chat-form">
               <div class="input-wrapper">
@@ -234,6 +277,18 @@
       const inpOctWorkspaceId = $('#octane-workspace-id');
       const inpOctMaxResults = $('#octane-max-results');
       const inpOctKCtx = $('#octane-k-ctx');
+      // Voice UI
+      const tabVoice = $('#tab-voice');
+      const voicePane = $('#voice-pane');
+      const inpVoiceFile = $('#voice-sample-file');
+      const btnVoiceUpload = $('#btn-voice-upload');
+      const btnVoiceClear = $('#btn-voice-clear');
+      const voiceStatus = $('#voice-status');
+      const voiceNote = $('#voice-note');
+      const selVoiceName = $('#voice-voice-name');
+      const selVoiceFmt = $('#voice-audio-format');
+      const inpVoiceText = $('#voice-tts-text');
+      const playerVoice = $('#voice-audio');
       const uploadStatus = $("#upload-status");
       const dropzone = $("#dropzone");
       const btnClear = $('#btn-clear');
@@ -1065,6 +1120,7 @@
 
       chatForm.addEventListener('submit', async (e) => {
         e.preventDefault();
+        if (activeTab === 'voice') { return; }
         const input = $("#message");
         const text = input.value.trim();
         if (!text) return;
@@ -1266,7 +1322,16 @@
         const sure = confirm('Clear chat history for this session?');
         if (!sure) return;
         try {
-          const res = await fetch(activeTab === 'docs' ? '/clear' : (activeTab === 'web' ? '/web/clear' : (activeTab === 'conf' ? '/conf/clear' : '/octane/clear')), { method: 'POST' });
+          const res = await fetch(
+            activeTab === 'docs' ? '/clear' : (
+              activeTab === 'web' ? '/web/clear' : (
+                activeTab === 'conf' ? '/conf/clear' : (
+                  activeTab === 'octane' ? '/octane/clear' : '/voice/clear'
+                )
+              )
+            ),
+            { method: 'POST' }
+          );
           const data = await res.json();
           if (data.ok) {
             await refreshCurrentMessages();
@@ -1280,7 +1345,16 @@
 
       newChatBtn.addEventListener('click', async () => {
         try {
-          const res = await fetch(activeTab === 'docs' ? '/clear' : (activeTab === 'web' ? '/web/clear' : (activeTab === 'conf' ? '/conf/clear' : '/octane/clear')), { method: 'POST' });
+          const res = await fetch(
+            activeTab === 'docs' ? '/clear' : (
+              activeTab === 'web' ? '/web/clear' : (
+                activeTab === 'conf' ? '/conf/clear' : (
+                  activeTab === 'octane' ? '/octane/clear' : '/voice/clear'
+                )
+              )
+            ),
+            { method: 'POST' }
+          );
           const data = await res.json();
           if (data.ok) {
             await refreshCurrentMessages();
@@ -1304,62 +1378,94 @@
           tabWeb.classList.remove('active');
           tabConf.classList.remove('active');
           tabOct.classList.remove('active');
+          if (tabVoice) tabVoice.classList.remove('active');
           messagesDocsEl.style.display = '';
           messagesWebEl.style.display = 'none';
           messagesConfEl.style.display = 'none';
           messagesOctEl.style.display = 'none';
+          if (voicePane) voicePane.style.display = 'none';
           if (webOptions) webOptions.style.display = 'none';
           if (confOptions) confOptions.style.display = 'none';
           if (octaneOptions) octaneOptions.style.display = 'none';
           if (octaneNotice) octaneNotice.style.display = 'none';
+          $('.chat-input-container').style.display = '';
         } else {
           tabDocs.classList.remove('active');
           if (tab === 'web') {
             tabWeb.classList.add('active');
             tabConf.classList.remove('active');
             tabOct.classList.remove('active');
+            if (tabVoice) tabVoice.classList.remove('active');
             messagesWebEl.style.display = '';
             messagesDocsEl.style.display = 'none';
             messagesConfEl.style.display = 'none';
             messagesOctEl.style.display = 'none';
+            if (voicePane) voicePane.style.display = 'none';
             if (webOptions) webOptions.style.display = '';
             if (confOptions) confOptions.style.display = 'none';
             if (octaneOptions) octaneOptions.style.display = 'none';
             if (octaneNotice) octaneNotice.style.display = 'none';
+            $('.chat-input-container').style.display = '';
           } else {
             if (tab === 'conf') {
               tabConf.classList.add('active');
               tabWeb.classList.remove('active');
               tabOct.classList.remove('active');
+              if (tabVoice) tabVoice.classList.remove('active');
               messagesConfEl.style.display = '';
               messagesDocsEl.style.display = 'none';
               messagesWebEl.style.display = 'none';
               messagesOctEl.style.display = 'none';
+              if (voicePane) voicePane.style.display = 'none';
               if (webOptions) webOptions.style.display = 'none';
               if (confOptions) confOptions.style.display = '';
               if (octaneOptions) octaneOptions.style.display = 'none';
               if (octaneNotice) octaneNotice.style.display = 'none';
+              $('.chat-input-container').style.display = '';
             } else {
-              tabOct.classList.add('active');
-              tabWeb.classList.remove('active');
-              tabConf.classList.remove('active');
-              messagesOctEl.style.display = '';
-              messagesDocsEl.style.display = 'none';
-              messagesWebEl.style.display = 'none';
-              messagesConfEl.style.display = 'none';
-              if (webOptions) webOptions.style.display = 'none';
-              if (confOptions) confOptions.style.display = 'none';
-              if (octaneOptions) octaneOptions.style.display = '';
-              if (octaneNotice) octaneNotice.style.display = OCTANE_READY ? 'none' : '';
+              if (tab === 'octane') {
+                tabOct.classList.add('active');
+                tabWeb.classList.remove('active');
+                tabConf.classList.remove('active');
+                if (tabVoice) tabVoice.classList.remove('active');
+                messagesOctEl.style.display = '';
+                messagesDocsEl.style.display = 'none';
+                messagesWebEl.style.display = 'none';
+                messagesConfEl.style.display = 'none';
+                if (voicePane) voicePane.style.display = 'none';
+                if (webOptions) webOptions.style.display = 'none';
+                if (confOptions) confOptions.style.display = 'none';
+                if (octaneOptions) octaneOptions.style.display = '';
+                if (octaneNotice) octaneNotice.style.display = OCTANE_READY ? 'none' : '';
+                $('.chat-input-container').style.display = '';
+              } else {
+                // Voice tab
+                if (tabVoice) tabVoice.classList.add('active');
+                tabWeb.classList.remove('active');
+                tabConf.classList.remove('active');
+                tabOct.classList.remove('active');
+                messagesDocsEl.style.display = 'none';
+                messagesWebEl.style.display = 'none';
+                messagesConfEl.style.display = 'none';
+                messagesOctEl.style.display = 'none';
+                if (webOptions) webOptions.style.display = 'none';
+                if (confOptions) confOptions.style.display = 'none';
+                if (octaneOptions) octaneOptions.style.display = 'none';
+                if (octaneNotice) octaneNotice.style.display = 'none';
+                if (voicePane) voicePane.style.display = '';
+                $('.chat-input-container').style.display = 'none';
+                refreshVoiceStatus();
+              }
             }
           }
         }
-        refreshCurrentMessages();
+        if (tab !== 'voice') refreshCurrentMessages();
       }
       tabDocs.addEventListener('click', () => setActiveTab('docs'));
       tabWeb.addEventListener('click', () => setActiveTab('web'));
       tabConf.addEventListener('click', () => setActiveTab('conf'));
       tabOct.addEventListener('click', () => setActiveTab('octane'));
+      if (tabVoice) tabVoice.addEventListener('click', () => setActiveTab('voice'));
 
       // Initial load
       refreshMessagesDocs();
@@ -1507,6 +1613,100 @@
           btnClearOctane.disabled = false;
         }
       });
+
+      // Voice tab logic
+      async function refreshVoiceStatus() {
+        try {
+          const res = await fetch('/voice/status');
+          const data = await res.json();
+          if (!data.ok) { voiceStatus.textContent = 'Voice: unavailable'; return; }
+          const has = !!data.sample_exists;
+          voiceStatus.textContent = has ? `Sample: ${data.sample_name || 'ready'}` : 'No sample uploaded.';
+          voiceNote.textContent = 'Local TTS active (WAV output). If a sample is uploaded and a Coqui model is configured, zero-shot cloning is used.';
+        } catch (e) {
+          voiceStatus.textContent = 'Voice status unavailable';
+        }
+      }
+
+      if (btnVoiceUpload) {
+        btnVoiceUpload.addEventListener('click', async () => {
+          const f = inpVoiceFile?.files?.[0];
+          if (!f) { voiceStatus.textContent = 'Pick an audio file first.'; return; }
+          btnVoiceUpload.disabled = true;
+          voiceStatus.textContent = 'Uploading sample...';
+          try {
+            const fd = new FormData();
+            fd.append('file', f, f.name);
+            const res = await fetch('/voice/upload_sample', { method: 'POST', body: fd });
+            const data = await res.json();
+            if (data.ok) {
+              voiceStatus.textContent = `Sample uploaded: ${data.sample_name || f.name}`;
+            } else {
+              voiceStatus.textContent = 'Upload failed: ' + (data.error || 'unknown error');
+            }
+          } catch (e) {
+            voiceStatus.textContent = 'Upload request failed.';
+          } finally {
+            btnVoiceUpload.disabled = false;
+          }
+        });
+      }
+
+      if (btnVoiceClear) {
+        btnVoiceClear.addEventListener('click', async () => {
+          const sure = confirm('Clear uploaded voice sample and generated audio?');
+          if (!sure) return;
+          btnVoiceClear.disabled = true;
+          try {
+            const res = await fetch('/voice/clear', { method: 'POST' });
+            const data = await res.json();
+            if (data.ok) {
+              voiceStatus.textContent = 'Voice data cleared.';
+              playerVoice.src = '';
+            } else {
+              voiceStatus.textContent = 'Clear failed: ' + (data.error || 'unknown error');
+            }
+          } catch (e) {
+            voiceStatus.textContent = 'Clear request failed.';
+          } finally {
+            btnVoiceClear.disabled = false;
+          }
+        });
+      }
+
+      const btnVoiceSay = $('#btn-voice-say');
+      if (btnVoiceSay) {
+        btnVoiceSay.addEventListener('click', async () => {
+          const text = (inpVoiceText?.value || '').trim();
+          if (!text) { voiceNote.textContent = 'Enter text to synthesize.'; return; }
+          voiceNote.textContent = 'Synthesizing...';
+          btnVoiceSay.disabled = true;
+          try {
+            const res = await fetch('/voice/tts', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                text,
+                voice_name: selVoiceName?.value || 'alloy',
+                format: selVoiceFmt?.value || 'mp3',
+              }),
+            });
+            if (!res.ok) {
+              try { const dj = await res.json(); voiceNote.textContent = 'TTS failed: ' + (dj.error || res.statusText); } catch (_) { voiceNote.textContent = 'TTS failed.'; }
+              return;
+            }
+            const blob = await res.blob();
+            const url = URL.createObjectURL(blob);
+            playerVoice.src = url;
+            playerVoice.play().catch(()=>{});
+            voiceNote.textContent = '';
+          } catch (e) {
+            voiceNote.textContent = 'TTS request failed.';
+          } finally {
+            btnVoiceSay.disabled = false;
+          }
+        });
+      }
     </script>
   </body>
   </html>

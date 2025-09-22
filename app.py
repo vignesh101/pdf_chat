@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import os
-from flask import Flask, render_template, request, jsonify, session
+from flask import Flask, render_template, request, jsonify, session, Response
 from typing import Any, Dict, List
 
 from config_loader import load_config
@@ -152,6 +152,151 @@ def create_app() -> Flask:
             octane_ready=bool(app.config.get('OCT_API')),
             thread_id=thread_id,
         )
+
+    # --- Voice: sample upload, status, TTS (OpenAI) ---
+    VOICE_DIR = os.path.join(os.getcwd(), 'data', 'voice')
+    try:
+        os.makedirs(VOICE_DIR, exist_ok=True)
+    except Exception:
+        pass
+
+    def _voice_sample_path() -> str | None:
+        b = session.get('voice_sample_basename')
+        if not b:
+            return None
+        return os.path.join(VOICE_DIR, b)
+
+    @app.get('/voice/status')
+    def voice_status():
+        p = _voice_sample_path()
+        exists = bool(p and os.path.isfile(p))
+        return jsonify({
+            'ok': True,
+            'sample_exists': exists,
+            'sample_name': os.path.basename(p) if exists else None,
+            'engine': 'local',
+        })
+
+    @app.post('/voice/upload_sample')
+    def voice_upload_sample():
+        f = request.files.get('file')
+        if not f:
+            return jsonify({'ok': False, 'error': 'No file uploaded'}), 400
+        try:
+            name = f.filename or 'sample'
+            base, ext = os.path.splitext(name)
+            ext = ext.lower() if ext else '.mp3'
+            safe_ext = ext if ext in ('.mp3', '.wav', '.m4a', '.aac', '.ogg', '.webm') else '.mp3'
+            target = os.path.join(VOICE_DIR, f'sample{safe_ext}')
+            with open(target, 'wb') as out:
+                out.write(f.read())
+            session['voice_sample_basename'] = os.path.basename(target)
+            return jsonify({'ok': True, 'sample_name': os.path.basename(target)})
+        except Exception as e:
+            return jsonify({'ok': False, 'error': str(e)}), 500
+
+    @app.post('/voice/clear')
+    def voice_clear():
+        try:
+            p = _voice_sample_path()
+            if p and os.path.isfile(p):
+                try:
+                    os.remove(p)
+                except Exception:
+                    pass
+            session.pop('voice_sample_basename', None)
+            return jsonify({'ok': True})
+        except Exception as e:
+            return jsonify({'ok': False, 'error': str(e)}), 500
+
+    @app.post('/voice/tts')
+    def voice_tts():
+        """Synthesize speech locally with optional zero-shot voice cloning from the uploaded sample.
+        Preferred engine: Coqui TTS (if installed and model configured). Fallback: espeak/espeak-ng, then pyttsx3.
+        Always returns WAV audio.
+        """
+        import io
+        import shutil
+        import subprocess
+        data = request.get_json(silent=True) or {}
+        text = (data.get('text') or '').strip()
+        if not text:
+            return jsonify({'ok': False, 'error': 'Text is required'}), 400
+        requested_voice = (data.get('voice_name') or '').strip()
+        sample_wav = _voice_sample_path()
+        out_path = os.path.join(VOICE_DIR, 'tts.wav')
+
+        # 1) Coqui TTS voice cloning if available
+        coqui_model = getattr(cfg, 'coqui_tts_model', None)
+        coqui_device = (getattr(cfg, 'coqui_tts_device', None) or '').strip() or None
+        coqui_lang = (getattr(cfg, 'coqui_tts_language', None) or '').strip() or None
+        if coqui_model:
+            try:
+                from TTS.api import TTS as COQUI_TTS  # type: ignore
+                # Initialize once and cache
+                coqui_inst = app.config.get('COQUI_TTS_INST')
+                if not coqui_inst or app.config.get('COQUI_TTS_MODEL_NAME') != coqui_model:
+                    coqui_inst = COQUI_TTS(model_name=coqui_model)
+                    # Force device if specified
+                    if coqui_device:
+                        try:
+                            coqui_inst.to(coqui_device)
+                        except Exception:
+                            pass
+                    app.config['COQUI_TTS_INST'] = coqui_inst
+                    app.config['COQUI_TTS_MODEL_NAME'] = coqui_model
+                # Prefer speaker_wav if sample uploaded and model supports it
+                kwargs = {}
+                if coqui_lang:
+                    kwargs['language'] = coqui_lang
+                if sample_wav and os.path.isfile(sample_wav):
+                    kwargs['speaker_wav'] = sample_wav
+                # Some models accept 'speaker' name; requested_voice may map there
+                if requested_voice:
+                    kwargs['speaker'] = requested_voice
+                coqui_inst.tts_to_file(text=text, file_path=out_path, **kwargs)
+                with open(out_path, 'rb') as f:
+                    return Response(f.read(), mimetype='audio/wav')
+            except Exception:
+                # fall through to other engines
+                pass
+
+        # 2) espeak/espeak-ng CLI
+        espeak_bin = shutil.which('espeak') or shutil.which('espeak-ng')
+        if espeak_bin:
+            try:
+                cmd = [espeak_bin, '-w', out_path, '-s', '170']
+                if requested_voice:
+                    cmd += ['-v', requested_voice]
+                cmd += [text]
+                subprocess.run(cmd, check=True)
+                with open(out_path, 'rb') as f:
+                    return Response(f.read(), mimetype='audio/wav')
+            except Exception:
+                pass
+
+        # 3) pyttsx3 fallback
+        try:
+            import pyttsx3  # type: ignore
+            eng = pyttsx3.init()
+            try:
+                if requested_voice:
+                    for v in eng.getProperty('voices') or []:
+                        vid = getattr(v, 'id', '') or ''
+                        name = getattr(v, 'name', '') or ''
+                        if requested_voice.lower() in (vid.lower() + ' ' + name.lower()):
+                            eng.setProperty('voice', v.id)
+                            break
+            except Exception:
+                pass
+            eng.save_to_file(text, out_path)
+            eng.runAndWait()
+            with open(out_path, 'rb') as f:
+                return Response(f.read(), mimetype='audio/wav')
+        except Exception:
+            pass
+
+        return jsonify({'ok': False, 'error': 'Local TTS unavailable. Install Coqui TTS (TTS), or espeak/espeak-ng, or pyttsx3.'}), 500
 
     # --- Octane: auth helper to acquire cookies ---
     @app.post('/octane/auth')

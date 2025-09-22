@@ -140,3 +140,28 @@ Notes and limits:
   With `Flask-Session` present, the app stores session data on disk under `data/flask_sessions` and keeps the browser cookie small. Without it, the app falls back to signed cookies and automatically trims chat history and source previews to stay under browser cookie limits.
 
   Note: Some Flask-Session/Werkzeug version combinations can cause a TypeError about a bytes-like cookie value when signing the server-side session id. To maximize compatibility, this app disables signing for server-side sessions by default (the cookie only contains a random id). If you prefer signing, set `SESSION_USE_SIGNER=1` in the environment before starting the app.
+
+## Voice (Local TTS + Voice Cloning)
+
+The Voice tab synthesizes speech locally and can perform basic zero-shot voice cloning from an uploaded sample using Coqui TTS. No cloud audio APIs are used.
+
+Engines (attempted in order):
+- Coqui TTS (library `TTS`): if `coqui_tts_model` is set. Uses the uploaded sample (`data/voice/sample.*`) for zero-shot cloning when the model supports `speaker_wav` (e.g., `your_tts`, `xtts_v2`).
+- espeak / espeak-ng (CLI) if available.
+- pyttsx3 (Python) as a last resort.
+
+Notes:
+- Output is returned as WAV audio. The UI’s format selector is ignored.
+- The “sample upload” stores your reference clip under `data/voice/`. True voice cloning is not performed; if you want cloning, we can integrate a specific HF model or provider that supports it.
+- If TTS fails locally, install one of: `sudo apt-get install espeak` (or espeak-ng), or `pip install pyttsx3`.
+
+Config example for Coqui TTS:
+
+```
+# config.toml
+coqui_tts_model = "tts_models/multilingual/multi-dataset/your_tts"  # or xtts_v2, or local model path
+coqui_tts_device = "cpu"            # or "cuda" if GPU available
+coqui_tts_language = "en"           # optional language hint for multilingual models
+```
+
+Then ensure the model is available (downloaded on first use by Coqui TTS, or point to a local model path). Note some models are large and CPU generation can be slow.

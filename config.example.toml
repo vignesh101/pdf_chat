@@ -37,3 +37,14 @@ confluence_base_url = ""
 #  - Basic auth with "email:api_token" (the app will send it as Basic if it contains a colon), or
 #  - A Bearer token (the app will send it as Bearer if there is no colon)
 confluence_access_token = ""
+
+# Local TTS (Coqui TTS)
+# To enable local voice cloning, install the Coqui TTS library and set a model name or local model path.
+# Examples (heavy models; download required):
+#   "tts_models/multilingual/multi-dataset/your_tts"  (zero-shot; CPU works but slow)
+#   "tts_models/multilingual/multi-dataset/xtts_v2"  (better quality; heavier)
+coqui_tts_model = ""
+# Optional: force device ("cpu" or "cuda"). Default is auto.
+coqui_tts_device = ""
+# Optional: language hint for multilingual models (e.g., "en").
+coqui_tts_language = ""
