@@ -294,6 +294,7 @@ def create_app() -> Flask:
         if not text:
             return jsonify({'ok': False, 'error': 'Text is required'}), 400
         requested_voice = (data.get('voice_name') or '').strip()
+        use_sample_only = requested_voice.lower() == 'sample'
         sample_wav = _voice_sample_path()
         out_path = os.path.join(VOICE_DIR, 'tts.wav')
 
@@ -323,7 +324,7 @@ def create_app() -> Flask:
                 if sample_wav and os.path.isfile(sample_wav):
                     kwargs['speaker_wav'] = sample_wav
                 # Some models accept 'speaker' name; requested_voice may map there
-                if requested_voice:
+                if requested_voice and not use_sample_only:
                     kwargs['speaker'] = requested_voice
                 coqui_inst.tts_to_file(text=text, file_path=out_path, **kwargs)
                 with open(out_path, 'rb') as f:
@@ -337,7 +338,7 @@ def create_app() -> Flask:
         if espeak_bin:
             try:
                 cmd = [espeak_bin, '-w', out_path, '-s', '170']
-                if requested_voice:
+                if requested_voice and not use_sample_only:
                     cmd += ['-v', requested_voice]
                 cmd += [text]
                 subprocess.run(cmd, check=True)

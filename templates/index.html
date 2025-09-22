@@ -206,6 +206,7 @@
                 <div style="display:flex; gap:8px; align-items:center; margin-bottom:8px; flex-wrap:wrap;">
                   <label>Voice:
                     <select id="voice-voice-name" style="margin-left:6px;">
+                      <!-- Dynamic: a 'sample' option will appear when a sample is uploaded -->
                       <option value="alloy">alloy</option>
                       <option value="verse">verse</option>
                       <option value="aria">aria</option>
@@ -294,6 +295,12 @@
       const voiceStatus = $('#voice-status');
       const voiceNote = $('#voice-note');
       const selVoiceName = $('#voice-voice-name');
+      if (selVoiceName) {
+        selVoiceName.addEventListener('change', () => {
+          // Mark that the user explicitly chose a voice to avoid auto-switch
+          selVoiceName.dataset.userSelected = '1';
+        });
+      }
       const selVoiceFmt = $('#voice-audio-format');
       const inpVoiceText = $('#voice-tts-text');
       const playerVoice = $('#voice-audio');
@@ -1637,6 +1644,30 @@
           const has = !!data.sample_exists;
           voiceStatus.textContent = has ? `Sample: ${data.sample_name || 'ready'}` : 'No sample uploaded.';
           voiceNote.textContent = 'Local TTS active (WAV output). If a sample is uploaded and a Coqui model is configured, zero-shot cloning is used.';
+          // Sync dropdown with sample status
+          try {
+            const sel = selVoiceName;
+            if (sel) {
+              let sampleOpt = sel.querySelector('option[value="sample"]');
+              if (has) {
+                if (!sampleOpt) {
+                  sampleOpt = document.createElement('option');
+                  sampleOpt.value = 'sample';
+                  sel.insertBefore(sampleOpt, sel.firstChild);
+                }
+                sampleOpt.textContent = data.sample_name ? `sample: ${data.sample_name}` : 'sample (uploaded)';
+                if (sel.value !== 'sample' && !sel.dataset.userSelected) {
+                  sel.value = 'sample';
+                }
+              } else if (sampleOpt) {
+                const wasSelected = sel.value === 'sample';
+                sampleOpt.remove();
+                if (wasSelected) {
+                  sel.value = sel.options.length ? sel.options[0].value : '';
+                }
+              }
+            }
+          } catch (_) {}
         } catch (e) {
           voiceStatus.textContent = 'Voice status unavailable';
         }
@@ -1837,17 +1868,46 @@
                 format: selVoiceFmt?.value || 'mp3',
               }),
             });
-            if (!res.ok) {
-              try { const dj = await res.json(); voiceNote.textContent = 'TTS failed: ' + (dj.error || res.statusText); } catch (_) { voiceNote.textContent = 'TTS failed.'; }
-              return;
+            if (res.ok) {
+              const blob = await res.blob();
+              const url = URL.createObjectURL(blob);
+              playerVoice.src = url;
+              playerVoice.play().catch(()=>{});
+              voiceNote.textContent = '';
+            } else {
+              // Fallback to browser speech synthesis when local TTS is unavailable
+              let errText = 'TTS failed.';
+              try { const dj = await res.json(); if (dj && dj.error) errText = 'TTS failed: ' + dj.error; } catch (_) {}
+              const canSpeak = 'speechSynthesis' in window && 'SpeechSynthesisUtterance' in window;
+              if (canSpeak) {
+                const utterance = new SpeechSynthesisUtterance(text);
+                try {
+                  const want = (selVoiceName?.value || '').toLowerCase();
+                  const voices = window.speechSynthesis.getVoices?.() || [];
+                  const match = voices.find(v => (v.name || '').toLowerCase().includes(want)) || null;
+                  if (match) utterance.voice = match;
+                } catch (_) {}
+                window.speechSynthesis.speak(utterance);
+                voiceNote.textContent = errText + ' Using browser speech synthesis as fallback (no audio file).';
+              } else {
+                voiceNote.textContent = errText + ' No fallback available.';
+              }
             }
-            const blob = await res.blob();
-            const url = URL.createObjectURL(blob);
-            playerVoice.src = url;
-            playerVoice.play().catch(()=>{});
-            voiceNote.textContent = '';
           } catch (e) {
-            voiceNote.textContent = 'TTS request failed.';
+            const canSpeak = 'speechSynthesis' in window && 'SpeechSynthesisUtterance' in window;
+            if (canSpeak) {
+              const utterance = new SpeechSynthesisUtterance((inpVoiceText?.value || '').trim());
+              try {
+                const want = (selVoiceName?.value || '').toLowerCase();
+                const voices = window.speechSynthesis.getVoices?.() || [];
+                const match = voices.find(v => (v.name || '').toLowerCase().includes(want)) || null;
+                if (match) utterance.voice = match;
+              } catch (_) {}
+              window.speechSynthesis.speak(utterance);
+              voiceNote.textContent = 'TTS request failed. Using browser speech synthesis as fallback (no audio file).';
+            } else {
+              voiceNote.textContent = 'TTS request failed.';
+            }
           } finally {
             btnVoiceSay.disabled = false;
           }
