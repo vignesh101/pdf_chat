@@ -20,6 +20,20 @@ def create_app() -> Flask:
     app.config['SECRET_KEY'] = cfg.secret_key or os.environ.get('FLASK_SECRET', 'dev-secret-change-me')
     # Always reload templates when changed (helps avoid stale UI in dev)
     app.config['TEMPLATES_AUTO_RELOAD'] = True
+    # Aggressively disable client caching in development to avoid stale HTML/CSS
+    disable_cache = (
+        bool(app.debug) or
+        (os.environ.get('DISABLE_CACHE', '').strip().lower() in ('1', 'true', 'yes', 'on'))
+    )
+    if disable_cache:
+        # Disable static file caching and force template reload behavior
+        app.config['SEND_FILE_MAX_AGE_DEFAULT'] = 0
+        try:
+            app.jinja_env.auto_reload = True
+            # Also drop the in-memory Jinja template cache in dev
+            app.jinja_env.cache = {}
+        except Exception:
+            pass
 
     # Prefer server-side sessions if Flask-Session is available.
     # Falls back gracefully to client-side secure cookies.
@@ -162,6 +176,21 @@ def create_app() -> Flask:
             build_rev=app.config.get('BUILD_REV', 'unknown'),
             thread_id=thread_id,
         )
+
+    # In development, add no-cache headers for HTML responses to prevent
+    # browsers/reverse proxies from serving stale index pages.
+    if disable_cache:
+        @app.after_request
+        def _no_cache(resp):  # type: ignore
+            try:
+                mt = (resp.mimetype or '').lower()
+                if mt.startswith('text/html'):
+                    resp.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
+                    resp.headers['Pragma'] = 'no-cache'
+                    resp.headers['Expires'] = '0'
+            except Exception:
+                pass
+            return resp
 
     # --- Voice: sample upload, status, TTS (OpenAI) ---
     VOICE_DIR = os.path.join(os.getcwd(), 'data', 'voice')
