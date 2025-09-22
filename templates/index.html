@@ -192,6 +192,13 @@
                   <button id="btn-voice-upload" type="button" class="action-btn">Upload Sample</button>
                   <button id="btn-voice-clear" type="button" class="action-btn danger">Clear Voice Data</button>
                 </div>
+                <div id="voice-rec-controls" style="margin-top:8px; display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+                  <button id="btn-voice-rec" type="button" class="action-btn">Record</button>
+                  <button id="btn-voice-stop" type="button" class="action-btn warn" disabled>Stop</button>
+                  <button id="btn-voice-upload-rec" type="button" class="action-btn" disabled>Use Recording</button>
+                  <span id="voice-rec-timer" style="font-size:12px; color: var(--text-muted);">00:00</span>
+                </div>
+                <audio id="voice-rec-audio" controls style="margin-top:6px; width:100%; display:none;"></audio>
                 <div id="voice-status" class="upload-status" style="margin-top:6px;">No sample uploaded.</div>
               </div>
               <div style="flex:2; min-width:320px;">
@@ -290,6 +297,12 @@
       const selVoiceFmt = $('#voice-audio-format');
       const inpVoiceText = $('#voice-tts-text');
       const playerVoice = $('#voice-audio');
+      // Voice recording controls
+      const btnVoiceRec = $('#btn-voice-rec');
+      const btnVoiceStop = $('#btn-voice-stop');
+      const btnVoiceUploadRec = $('#btn-voice-upload-rec');
+      const recTimer = $('#voice-rec-timer');
+      const recAudio = $('#voice-rec-audio');
       const uploadStatus = $("#upload-status");
       const dropzone = $("#dropzone");
       const btnClear = $('#btn-clear');
@@ -1629,6 +1642,137 @@
         }
       }
 
+      // --- Voice recording logic (MediaRecorder) ---
+      let mediaStream = null;
+      let mediaRecorder = null;
+      let recChunks = [];
+      let recBlob = null;
+      let recTimerInt = null;
+      let recStartMs = 0;
+
+      function fmtMMSS(ms) {
+        const s = Math.max(0, Math.floor(ms / 1000));
+        const mm = String(Math.floor(s / 60)).padStart(2, '0');
+        const ss = String(s % 60).padStart(2, '0');
+        return `${mm}:${ss}`;
+      }
+
+      function setRecUI(recording) {
+        if (btnVoiceRec) btnVoiceRec.disabled = !!recording;
+        if (btnVoiceStop) btnVoiceStop.disabled = !recording;
+        if (btnVoiceUploadRec) btnVoiceUploadRec.disabled = !recBlob;
+      }
+
+      function clearRec() {
+        try { if (mediaRecorder && mediaRecorder.state !== 'inactive') mediaRecorder.stop(); } catch(_){}
+        try { if (mediaStream) mediaStream.getTracks().forEach(t => t.stop()); } catch(_){}
+        mediaRecorder = null;
+        mediaStream = null;
+        recChunks = [];
+        recBlob = null;
+        if (recAudio) { recAudio.src = ''; recAudio.style.display = 'none'; }
+        if (recTimer) recTimer.textContent = '00:00';
+        if (recTimerInt) { clearInterval(recTimerInt); recTimerInt = null; }
+        setRecUI(false);
+      }
+
+      function pickAudioMime() {
+        const cands = [
+          'audio/webm;codecs=opus',
+          'audio/webm',
+          'audio/ogg;codecs=opus',
+          'audio/ogg'
+        ];
+        for (const m of cands) {
+          try { if (window.MediaRecorder && MediaRecorder.isTypeSupported(m)) return m; } catch(_){}
+        }
+        return '';
+      }
+
+      if (btnVoiceRec) {
+        btnVoiceRec.addEventListener('click', async () => {
+          if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+            voiceStatus.textContent = 'Recording not supported in this browser.';
+            return;
+          }
+          try {
+            mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+          } catch (e) {
+            voiceStatus.textContent = 'Microphone permission denied.';
+            return;
+          }
+          try {
+            const mime = pickAudioMime();
+            recChunks = [];
+            recBlob = null;
+            if (recAudio) { recAudio.src = ''; recAudio.style.display = 'none'; }
+            mediaRecorder = new MediaRecorder(mediaStream, mime ? { mimeType: mime } : undefined);
+            mediaRecorder.ondataavailable = (ev) => {
+              if (ev && ev.data && ev.data.size > 0) recChunks.push(ev.data);
+            };
+            mediaRecorder.onstop = () => {
+              try { if (recTimerInt) { clearInterval(recTimerInt); recTimerInt = null; } } catch(_){}
+              try { if (mediaStream) mediaStream.getTracks().forEach(t => t.stop()); } catch(_){}
+              mediaStream = null;
+              const type = mediaRecorder && mediaRecorder.mimeType ? mediaRecorder.mimeType : (mime || 'audio/webm');
+              recBlob = new Blob(recChunks, { type });
+              const url = URL.createObjectURL(recBlob);
+              if (recAudio) {
+                recAudio.src = url;
+                recAudio.style.display = 'block';
+              }
+              setRecUI(false);
+              if (btnVoiceUploadRec) btnVoiceUploadRec.disabled = !recBlob;
+              voiceStatus.textContent = 'Recording ready. Click "Use Recording" to upload as sample.';
+            };
+            mediaRecorder.start(100);
+            recStartMs = Date.now();
+            if (recTimer) recTimer.textContent = '00:00';
+            if (recTimerInt) { clearInterval(recTimerInt); recTimerInt = null; }
+            recTimerInt = setInterval(() => {
+              if (recTimer) recTimer.textContent = fmtMMSS(Date.now() - recStartMs);
+            }, 250);
+            setRecUI(true);
+            voiceStatus.textContent = 'Recording... speak your sample (10–30s ideal).';
+          } catch (e) {
+            voiceStatus.textContent = 'Failed to start recording.';
+            clearRec();
+          }
+        });
+      }
+
+      if (btnVoiceStop) {
+        btnVoiceStop.addEventListener('click', () => {
+          try { if (mediaRecorder && mediaRecorder.state !== 'inactive') mediaRecorder.stop(); } catch(_){}
+        });
+      }
+
+      if (btnVoiceUploadRec) {
+        btnVoiceUploadRec.addEventListener('click', async () => {
+          if (!recBlob) { voiceStatus.textContent = 'No recording to upload.'; return; }
+          btnVoiceUploadRec.disabled = true;
+          voiceStatus.textContent = 'Uploading recording...';
+          try {
+            const fd = new FormData();
+            // Use a reasonable extension; server accepts .webm/.ogg/.wav
+            const fname = (recBlob.type && recBlob.type.includes('ogg')) ? 'recording.ogg' : 'recording.webm';
+            fd.append('file', recBlob, fname);
+            const res = await fetch('/voice/upload_sample', { method: 'POST', body: fd });
+            const data = await res.json();
+            if (data.ok) {
+              voiceStatus.textContent = `Sample uploaded: ${data.sample_name || fname}`;
+              refreshVoiceStatus();
+            } else {
+              voiceStatus.textContent = 'Upload failed: ' + (data.error || 'unknown error');
+            }
+          } catch (e) {
+            voiceStatus.textContent = 'Upload request failed.';
+          } finally {
+            btnVoiceUploadRec.disabled = false;
+          }
+        });
+      }
+
       if (btnVoiceUpload) {
         btnVoiceUpload.addEventListener('click', async () => {
           const f = inpVoiceFile?.files?.[0];
@@ -1664,6 +1808,7 @@
             if (data.ok) {
               voiceStatus.textContent = 'Voice data cleared.';
               playerVoice.src = '';
+              clearRec();
             } else {
               voiceStatus.textContent = 'Clear failed: ' + (data.error || 'unknown error');
             }

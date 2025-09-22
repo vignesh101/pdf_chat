@@ -153,7 +153,7 @@ Engines (attempted in order):
 
 Notes:
 - Output is returned as WAV audio. The UI’s format selector is ignored.
-- The “sample upload” stores your reference clip under `data/voice/`. True voice cloning is not performed; if you want cloning, we can integrate a specific HF model or provider that supports it.
+- You can upload a sample file or record one in-browser (Record → Stop → Use Recording). The sample is stored under `data/voice/`.
 - If TTS fails locally, install one of: `sudo apt-get install espeak` (or espeak-ng), or `pip install pyttsx3`.
 
 Config example for Coqui TTS:
