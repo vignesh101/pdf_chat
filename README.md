@@ -122,6 +122,7 @@ This app includes an “Octane” chat mode that attempts to authenticate to ALM
 Using it:
 - In the UI, click the “Octane” tab. Enter your Project ID and Workspace ID, adjust “Entities” and “Context k” if needed, then ask your question.
 - The server attempts a cookie-based or OAuth login automatically before fetching. A best-effort set of Octane endpoints is tried; results depend on your server version and permissions.
+ - If your prompt includes a test id (for example, “test id 12345” or “TC12345”), the app will also try to fetch that test’s script/steps from Octane and add it to the Octane index before answering.
 
 Notes and limits:
 - Endpoints differ by Octane version/deployment; if no items are fetched, the chat will continue but with no Octane context.

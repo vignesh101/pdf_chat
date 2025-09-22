@@ -114,6 +114,38 @@ def create_app() -> Flask:
 
         session['chat_history'] = [clamp_msg(m) for m in (hist[-max_n:])]
 
+    def _extract_octane_test_ids(text: str) -> List[str]:
+        """Return likely Octane test ids from a user message.
+
+        Best-effort patterns: "test id 12345", "test-id: 12345", "test 12345", "TC12345".
+        """
+        import re
+        s = (text or '').strip()
+        if not s:
+            return []
+        out: List[str] = []
+        # Pattern 1: explicit "test id" mentions
+        for m in re.finditer(r"\btest\s*(?:[-_]?\s*id)?\s*[:#]?\s*(\d{2,})\b", s, flags=re.I):
+            try:
+                out.append(str(int(m.group(1))))
+            except Exception:
+                continue
+        # Pattern 2: TC12345 or TC-12345
+        for m in re.finditer(r"\bTC[-_ ]?(\d{2,})\b", s, flags=re.I):
+            try:
+                out.append(str(int(m.group(1))))
+            except Exception:
+                continue
+        # Deduplicate, preserve order
+        seen = set()
+        uniq: List[str] = []
+        for tid in out:
+            if tid in seen:
+                continue
+            seen.add(tid)
+            uniq.append(tid)
+        return uniq
+
     # Build OpenAI + HTTP clients and hold them in app context (may be None if not configured)
     client = build_openai_client(cfg)
     http_client = build_httpx_client(cfg)
@@ -387,6 +419,23 @@ def create_app() -> Flask:
             # best-effort
             items = []
 
+        # If the user referenced a test id, fetch its script and index it
+        try:
+            tids = _extract_octane_test_ids(message)
+            if tids:
+                seen_keys = set(session.get('octane_seen_test_keys', []) or [])
+                for tid in tids:
+                    res = oct_api.fetch_test_script(project_id, workspace_id, tid)
+                    if res and (res.get('text') or '').strip():
+                        key = res.get('key') or f"octane:test:{tid}"
+                        if key not in seen_keys:
+                            oct_store.add_item(key, res.get('title'), res.get('text') or '')
+                            seen_keys.add(key)
+                session['octane_seen_test_keys'] = list(seen_keys)
+        except Exception:
+            # non-fatal
+            pass
+
         try:
             ctx_chunks_meta = oct_store.search_with_meta(message, k=k_ctx)
         except Exception:
@@ -466,6 +515,22 @@ def create_app() -> Flask:
             items = oct_api.fetch_sample_items(project_id, workspace_id, limit=max_results)
             for it in items:
                 oct_store.add_item(it.get('key') or '', it.get('title'), it.get('text') or '')
+        except Exception:
+            pass
+
+        # If the user referenced a test id, fetch its script and index it before retrieval
+        try:
+            tids = _extract_octane_test_ids(message)
+            if tids:
+                seen_keys = set(session.get('octane_seen_test_keys', []) or [])
+                for tid in tids:
+                    res = oct_api.fetch_test_script(project_id, workspace_id, tid)
+                    if res and (res.get('text') or '').strip():
+                        key = res.get('key') or f"octane:test:{tid}"
+                        if key not in seen_keys:
+                            oct_store.add_item(key, res.get('title'), res.get('text') or '')
+                            seen_keys.add(key)
+                session['octane_seen_test_keys'] = list(seen_keys)
         except Exception:
             pass
 
