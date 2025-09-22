@@ -18,6 +18,8 @@ def create_app() -> Flask:
     cfg = load_config()
     app = Flask(__name__)
     app.config['SECRET_KEY'] = cfg.secret_key or os.environ.get('FLASK_SECRET', 'dev-secret-change-me')
+    # Always reload templates when changed (helps avoid stale UI in dev)
+    app.config['TEMPLATES_AUTO_RELOAD'] = True
 
     # Prefer server-side sessions if Flask-Session is available.
     # Falls back gracefully to client-side secure cookies.
@@ -120,6 +122,13 @@ def create_app() -> Flask:
         oct_api = None
     app.config['OCT_API'] = oct_api
     app.config['MODEL_NAME'] = cfg.model_name
+    # Stamp build/version for visibility in UI
+    try:
+        import subprocess
+        rev = subprocess.run(['git', 'rev-parse', '--short', 'HEAD'], capture_output=True, text=True)
+        app.config['BUILD_REV'] = (rev.stdout or '').strip() or 'unknown'
+    except Exception:
+        app.config['BUILD_REV'] = 'unknown'
     # Initialize local FAISS embedding store only if client is available
     try:
         if client is not None:
@@ -150,6 +159,7 @@ def create_app() -> Flask:
             disable_ssl=cfg.disable_ssl,
             client_ready=bool(app.config.get('OPENAI_CLIENT')),
             octane_ready=bool(app.config.get('OCT_API')),
+            build_rev=app.config.get('BUILD_REV', 'unknown'),
             thread_id=thread_id,
         )
 

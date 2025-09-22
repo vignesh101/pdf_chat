@@ -97,6 +97,7 @@
         <div class="sidebar-footer">
           <div class="config-info">
             <div class="config-item">Model: <code>{{ model_name }}</code></div>
+            <div class="config-item">Build: <code>{{ build_rev or 'unknown' }}</code></div>
             {% if proxy_url %}<div class="config-item">Proxy: <code>{{ proxy_url }}</code></div>{% endif %}
             {% if base_url %}<div class="config-item">Base URL: <code>{{ base_url }}</code></div>{% endif %}
             {% if disable_ssl %}<div class="config-item warn">SSL Verify: disabled</div>{% endif %}
