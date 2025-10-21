@@ -12,14 +12,6 @@ openai_api_key = ""
 # Disable SSL verification for HTTP client (use only for trusted setups)
 disable_ssl = false
 
-# ALM Octane integration (optional)
-# Base URL of your ALM Octane site, e.g. "https://octane.example.com:8080"
-octane_base_url = ""
-# Client credentials (Client ID and Client Secret). These are used to attempt authentication
-# and capture session cookies for subsequent API requests.
-octane_client_id = ""
-octane_client_secret = ""
-
 # App mode (only 'chat' is supported)
 mode = "chat"
 
@@ -33,22 +25,3 @@ embedding_model_name = "text-embedding-3-small"
 # Secret key for Flask sessions (required for production)
 # Example: a random 32+ character string
 secret_key = ""
-
-# Confluence integration (optional)
-# Base URL of your Confluence site, e.g. "https://your-domain.atlassian.net" (with or without trailing /wiki)
-confluence_base_url = ""
-# Access token for Confluence. For Atlassian Cloud you can use:
-#  - Basic auth with "email:api_token" (the app will send it as Basic if it contains a colon), or
-#  - A Bearer token (the app will send it as Bearer if there is no colon)
-confluence_access_token = ""
-
-# Local TTS (Coqui TTS)
-# To enable local voice cloning, install the Coqui TTS library and set a model name or local model path.
-# Examples (heavy models; download required):
-#   "tts_models/multilingual/multi-dataset/your_tts"  (zero-shot; CPU works but slow)
-#   "tts_models/multilingual/multi-dataset/xtts_v2"  (better quality; heavier)
-coqui_tts_model = ""
-# Optional: force device ("cpu" or "cuda"). Default is auto.
-coqui_tts_device = ""
-# Optional: language hint for multilingual models (e.g., "en").
-coqui_tts_language = ""

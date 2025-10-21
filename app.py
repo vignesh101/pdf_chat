@@ -5,13 +5,8 @@ from flask import Flask, render_template, request, jsonify, session, Response
 from typing import Any, Dict, List
 
 from config_loader import load_config
-from openai_client import build_openai_client, build_httpx_client
+from openai_client import build_openai_client
 import embedding_store
-import web_embedding_store as web_store
-import confluence_embedding_store as conf_store
-import octane_embedding_store as oct_store
-from confluence_client import ConfluenceAPI
-from octane_client import OctaneAPI
 
 
 def create_app() -> Flask:
@@ -149,25 +144,7 @@ def create_app() -> Flask:
 
     # Build OpenAI + HTTP clients and hold them in app context (may be None if not configured)
     client = build_openai_client(cfg)
-    http_client = build_httpx_client(cfg)
     app.config['OPENAI_CLIENT'] = client
-    app.config['HTTP_CLIENT'] = http_client
-    # Optional Confluence API client
-    conf_api = None
-    try:
-        if getattr(cfg, 'confluence_base_url', None) and getattr(cfg, 'confluence_access_token', None):
-            conf_api = ConfluenceAPI(cfg.confluence_base_url, cfg.confluence_access_token, http_client)
-    except Exception:
-        conf_api = None
-    app.config['CONF_API'] = conf_api
-    # Optional Octane API client
-    oct_api = None
-    try:
-        if getattr(cfg, 'octane_base_url', None) and getattr(cfg, 'octane_client_id', None) and getattr(cfg, 'octane_client_secret', None):
-            oct_api = OctaneAPI(cfg.octane_base_url, cfg.octane_client_id, cfg.octane_client_secret, http_client)
-    except Exception:
-        oct_api = None
-    app.config['OCT_API'] = oct_api
     app.config['MODEL_NAME'] = cfg.model_name
     # Stamp build/version for visibility in UI
     try:
@@ -180,12 +157,6 @@ def create_app() -> Flask:
     try:
         if client is not None:
             embedding_store.init(client, embedding_model_name=cfg.embedding_model_name)
-            # Initialize separate FAISS store for Web chat
-            web_store.init(client, embedding_model_name=cfg.embedding_model_name)
-            # Initialize separate FAISS store for Confluence chat
-            conf_store.init(client, embedding_model_name=cfg.embedding_model_name)
-            # Initialize separate FAISS store for Octane chat
-            oct_store.init(client, embedding_model_name=cfg.embedding_model_name)
     except Exception:
         # Do not block app startup; search/upload will surface errors
         pass
@@ -194,9 +165,6 @@ def create_app() -> Flask:
     def index():
         # Single mode: Chat with local FAISS RAG
         session.setdefault('chat_history', [])
-        session.setdefault('web_chat_history', [])
-        session.setdefault('conf_chat_history', [])
-        session.setdefault('octane_chat_history', [])
         thread_id = None
         return render_template(
             'index.html',
@@ -205,7 +173,6 @@ def create_app() -> Flask:
             base_url=cfg.openai_base_url,
             disable_ssl=cfg.disable_ssl,
             client_ready=bool(app.config.get('OPENAI_CLIENT')),
-            octane_ready=bool(app.config.get('OCT_API')),
             build_rev=app.config.get('BUILD_REV', 'unknown'),
             thread_id=thread_id,
         )

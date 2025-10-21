@@ -844,9 +844,6 @@
           uploadStatus.textContent = `${droppedFiles.length} file(s) ready`;
         }
       });
-      dropzone.addEventListener('click', () => {
-        $('#file').click();
-      });
       $('#file').addEventListener('change', (e) => {
         const files = Array.from(e.target.files || []);
         if (files.length) {
