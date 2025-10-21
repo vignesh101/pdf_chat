@@ -13,6 +13,13 @@
       <main class="main-content">
         <header class="chat-header">
           <h1>Document Chat</h1>
+          <div class="chat-actions">
+            <button class="new-chat-btn" id="new-chat-main" title="Start new chat">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M12 5v14M5 12h14"/>
+              </svg>
+            </button>
+          </div>
         </header>
 
         {% if not client_ready %}
@@ -142,6 +149,7 @@
       const progressBar = $('#rebuild-progress');
       const recentFilesList = $('#recent-files-list');
       const newChatBtn = $('#new-chat');
+      const newChatBtnMain = $('#new-chat-main');
 
       function escapeHtml(str) {
         const map = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
@@ -980,19 +988,24 @@
         }
       });
 
-      newChatBtn.addEventListener('click', async () => {
-        try {
-          const res = await fetch('/clear', { method: 'POST' });
-          const data = await res.json();
-          if (data.ok) {
-            await refreshCurrentMessages();
-          } else {
-            alert('Failed to start new chat: ' + (data.error || 'unknown error'));
+      function handleStartNewChat() {
+        return (async () => {
+          try {
+            const res = await fetch('/clear', { method: 'POST' });
+            const data = await res.json();
+            if (data.ok) {
+              await refreshCurrentMessages();
+            } else {
+              alert('Failed to start new chat: ' + (data.error || 'unknown error'));
+            }
+          } catch (e) {
+            alert('Request failed while starting new chat.');
           }
-        } catch (e) {
-          alert('Request failed while starting new chat.');
-        }
-      });
+        })();
+      }
+
+      if (newChatBtn) newChatBtn.addEventListener('click', handleStartNewChat);
+      if (newChatBtnMain) newChatBtnMain.addEventListener('click', handleStartNewChat);
 
       // Tabs behavior
       const tabChat = $('#tab-chat');

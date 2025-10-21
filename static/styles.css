@@ -464,6 +464,7 @@ html, body {
   align-items: center;
   padding: 0 20px;
   gap: 16px;
+  justify-content: space-between;
 }
 
 .chat-header h1 {
@@ -477,6 +478,14 @@ html, body {
   display: flex;
   flex-direction: column;
   min-height: 0;
+}
+
+/* Header actions (Start New Chat) */
+.chat-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
 }
 
 /* Sub-tabs */
@@ -528,6 +537,35 @@ html, body {
   /* Allow proper scrolling within flex container to avoid overlap */
   min-height: 0;
 }
+
+/* Settings tab: light, clean cards and fixed history height */
+.sidebar-tab .uploader,
+.sidebar-tab .status-panel,
+.sidebar-tab .chat-history,
+.sidebar-tab .recent-files {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-md);
+  padding: 16px;
+}
+.sidebar-tab .uploader h3,
+.sidebar-tab .status-panel h3,
+.sidebar-tab .recent-files h3,
+.sidebar-tab .history-header h3 {
+  color: var(--text-primary);
+}
+.sidebar-tab .chat-history { flex: 0 0 auto; max-height: 50vh; }
+.sidebar-tab .history-item { border: 1px solid var(--border-light); background: var(--bg-secondary); }
+.sidebar-tab .history-item:hover { background: var(--bg-tertiary); }
+.sidebar-tab .history-content { color: var(--text-primary); }
+.sidebar-tab .history-timestamp { color: var(--text-secondary); }
+.sidebar-tab .recent-file { background: var(--bg-secondary); border: 1px solid var(--border-light); }
+.sidebar-tab .rf-name { color: var(--text-primary); }
+.sidebar-tab .rf-meta { color: var(--text-secondary); }
+
+/* General light tweaks */
+.badge.neutral { background: rgba(0,0,0,0.05); color: #6b7280; border-color: rgba(0,0,0,0.1); }
+.history-item:hover { background: var(--bg-tertiary); }
 
 /* Message Styling */
 .msg {

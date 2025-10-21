@@ -1,0 +1,42 @@
+ * Serving Flask app 'app.py'
+ * Debug mode: off
+Traceback (most recent call last):
+  File "/home/admin1/document_chat/.venv/bin/flask", line 7, in <module>
+    sys.exit(main())
+             ^^^^^^
+  File "/home/admin1/document_chat/.venv/lib/python3.12/site-packages/flask/cli.py", line 1131, in main
+    cli.main()
+  File "/home/admin1/document_chat/.venv/lib/python3.12/site-packages/click/core.py", line 1383, in main
+    rv = self.invoke(ctx)
+         ^^^^^^^^^^^^^^^^
+  File "/home/admin1/document_chat/.venv/lib/python3.12/site-packages/click/core.py", line 1850, in invoke
+    return _process_result(sub_ctx.command.invoke(sub_ctx))
+                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/admin1/document_chat/.venv/lib/python3.12/site-packages/click/core.py", line 1246, in invoke
+    return ctx.invoke(self.callback, **ctx.params)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/admin1/document_chat/.venv/lib/python3.12/site-packages/click/core.py", line 814, in invoke
+    return callback(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/admin1/document_chat/.venv/lib/python3.12/site-packages/click/decorators.py", line 93, in new_func
+    return ctx.invoke(f, obj, *args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/admin1/document_chat/.venv/lib/python3.12/site-packages/click/core.py", line 814, in invoke
+    return callback(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/admin1/document_chat/.venv/lib/python3.12/site-packages/flask/cli.py", line 991, in run_command
+    run_simple(
+  File "/home/admin1/document_chat/.venv/lib/python3.12/site-packages/werkzeug/serving.py", line 1093, in run_simple
+    srv = make_server(
+          ^^^^^^^^^^^^
+  File "/home/admin1/document_chat/.venv/lib/python3.12/site-packages/werkzeug/serving.py", line 930, in make_server
+    return ThreadedWSGIServer(
+           ^^^^^^^^^^^^^^^^^^^
+  File "/home/admin1/document_chat/.venv/lib/python3.12/site-packages/werkzeug/serving.py", line 750, in __init__
+    super().__init__(
+  File "/usr/lib/python3.12/socketserver.py", line 453, in __init__
+    self.socket = socket.socket(self.address_family,
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/socket.py", line 233, in __init__
+    _socket.socket.__init__(self, family, type, proto, fileno)
+PermissionError: [Errno 1] Operation not permitted
