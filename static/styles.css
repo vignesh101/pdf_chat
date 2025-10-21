@@ -472,6 +472,10 @@ html, body {
   font-weight: 600;
   color: var(--text-primary);
   margin: 0;
+  /* Keep title on one line and clip gracefully if space is tight */
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* Brand (logo + title) */
@@ -479,6 +483,9 @@ html, body {
   display: flex;
   align-items: center;
   gap: 10px;
+  /* Allow the title to consume available width */
+  flex: 1 1 auto;
+  min-width: 0;
 }
 
 .brand-logo {
@@ -500,6 +507,7 @@ html, body {
   align-items: center;
   gap: 8px;
   margin-left: auto;
+  flex-shrink: 0;
 }
 
 /* Sub-tabs */
