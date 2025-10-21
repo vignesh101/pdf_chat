@@ -471,6 +471,20 @@ html, body {
   font-size: 18px;
   font-weight: 600;
   color: var(--text-primary);
+  margin: 0;
+}
+
+/* Brand (logo + title) */
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.brand-logo {
+  height: 24px;
+  width: auto;
+  display: block;
 }
 
 .chat-container {
