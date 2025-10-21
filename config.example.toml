@@ -30,6 +30,10 @@ model_name = "gpt-4o-mini"
 # Common values: "text-embedding-3-small" (cheap), "text-embedding-3-large" (high quality)
 embedding_model_name = "text-embedding-3-small"
 
+# Secret key for Flask sessions (required for production)
+# Example: a random 32+ character string
+secret_key = ""
+
 # Confluence integration (optional)
 # Base URL of your Confluence site, e.g. "https://your-domain.atlassian.net" (with or without trailing /wiki)
 confluence_base_url = ""

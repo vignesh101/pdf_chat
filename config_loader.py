@@ -44,6 +44,7 @@ def load_config() -> AppConfig:
     cfg = _load_toml(os.path.join(os.getcwd(), 'config.toml'))
 
     def get_cfg(key: str, env: str, default=None):
+        # Environment variables can override config, but are not required.
         if env in os.environ and os.environ[env] != "":
             return os.environ[env]
         v = cfg.get(key) if isinstance(cfg, dict) else None
@@ -64,7 +65,7 @@ def load_config() -> AppConfig:
         mode = "chat"
     model_name = get_cfg('model_name', 'MODEL_NAME', 'gpt-4o-mini')
     embedding_model_name = get_cfg('embedding_model_name', 'EMBEDDING_MODEL_NAME', 'text-embedding-3-small')
-    secret_key = os.environ.get('SECRET_KEY')
+    secret_key = get_cfg('secret_key', 'SECRET_KEY', None)
     coqui_tts_model = get_cfg('coqui_tts_model', 'COQUI_TTS_MODEL', None)
     coqui_tts_device = get_cfg('coqui_tts_device', 'COQUI_TTS_DEVICE', None)
     coqui_tts_language = get_cfg('coqui_tts_language', 'COQUI_TTS_LANGUAGE', None)

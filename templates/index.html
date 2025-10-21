@@ -8,113 +8,10 @@
   </head>
   <body>
     <div class="app">
-      <!-- Sidebar -->
-      <aside class="sidebar" id="sidebar">
-        <div class="sidebar-header">
-          <div class="sidebar-brand">
-            <h1>Document Chat</h1>
-            <span class="tag">RAG</span>
-          </div>
-          <div class="sidebar-actions">
-            <button class="new-chat-btn" id="new-chat" title="Start new chat">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M12 5v14M5 12h14"/>
-              </svg>
-            </button>
-            <button class="sidebar-toggle" id="sidebar-close" aria-label="Close sidebar">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M18 6L6 18M6 6l12 12"/>
-              </svg>
-            </button>
-          </div>
-        </div>
-
-        <div class="sidebar-content">
-          <section class="uploader">
-            <h3>Upload Documents</h3>
-            <form id="upload-form">
-              <div class="dropzone" id="dropzone">
-                <input type="file" id="file" name="file" multiple />
-                <div class="dz-instructions">
-                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-                    <polyline points="7,10 12,15 17,10"/>
-                    <line x1="12" y1="15" x2="12" y2="3"/>
-                  </svg>
-                  <span>Drop files here or click to browse</span>
-                </div>
-              </div>
-              <button type="submit" class="upload-btn">Upload Files</button>
-              <div id="upload-status" class="upload-status"></div>
-            </form>
-          </section>
-
-          <section class="chat-history">
-            <div class="history-header">
-              <h3>Chat History</h3>
-              <button id="btn-clear" type="button" class="clear-btn" title="Clear chat history">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <path d="M3 6h18M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6m3 0V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/>
-                </svg>
-              </button>
-            </div>
-            <div id="history-list" class="history-list"></div>
-            <div id="history-meta" class="history-meta"></div>
-          </section>
-
-          <section class="status-panel">
-            <h3>Status</h3>
-            <div class="status-row">
-              <span id="status-client" class="badge">OpenAI: …</span>
-            </div>
-            <div class="status-row" style="margin-top:6px;">
-              <span id="status-index" class="badge">Index: …</span>
-            </div>
-            <div class="status-row" style="margin-top:6px;">
-              <span id="status-files" class="badge neutral">Files: …</span>
-            </div>
-            <div class="status-actions">
-              <button id="btn-rebuild" type="button" class="action-btn">Rebuild Index</button>
-              <button id="btn-cancel-rebuild" type="button" class="action-btn warn" style="display:none;">Cancel</button>
-              <button id="btn-clear-index" type="button" class="action-btn danger">Clear Index</button>
-              <button id="btn-clear-all" type="button" class="action-btn danger">Clear All Data</button>
-              <button id="btn-clear-web" type="button" class="action-btn danger" title="Clear cached web pages (Web RAG index)">Clear Web Cache</button>
-              <button id="btn-clear-conf" type="button" class="action-btn danger" title="Clear cached Confluence pages (Confluence RAG index)">Clear Confluence Cache</button>
-              <button id="btn-clear-octane" type="button" class="action-btn danger" title="Clear cached Octane items (Octane RAG index)">Clear Octane Cache</button>
-            </div>
-            <div class="progress" id="rebuild-progress-wrap">
-              <div id="rebuild-progress" class="progress-bar" style="width:0%"></div>
-            </div>
-            <div id="status-note" class="status-note"></div>
-          </section>
-
-          <section class="recent-files">
-            <h3>Upload History</h3>
-            <div id="recent-files-list" class="recent-files-list"></div>
-          </section>
-        </div>
-
-        <div class="sidebar-footer">
-          <div class="config-info">
-            <div class="config-item">Model: <code>{{ model_name }}</code></div>
-            <div class="config-item">Build: <code>{{ build_rev or 'unknown' }}</code></div>
-            {% if proxy_url %}<div class="config-item">Proxy: <code>{{ proxy_url }}</code></div>{% endif %}
-            {% if base_url %}<div class="config-item">Base URL: <code>{{ base_url }}</code></div>{% endif %}
-            {% if disable_ssl %}<div class="config-item warn">SSL Verify: disabled</div>{% endif %}
-          </div>
-        </div>
-      </aside>
 
       <!-- Main Chat Area -->
       <main class="main-content">
         <header class="chat-header">
-          <button class="sidebar-toggle" id="sidebar-toggle" aria-label="Toggle sidebar">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <line x1="3" y1="6" x2="21" y2="6"/>
-              <line x1="3" y1="12" x2="21" y2="12"/>
-              <line x1="3" y1="18" x2="21" y2="18"/>
-            </svg>
-          </button>
           <h1>Document Chat</h1>
         </header>
 
@@ -125,110 +22,81 @@
         {% endif %}
 
         <div class="sub-tabs" style="display:flex; gap:8px; padding: 0 16px 8px 16px; align-items:center;">
-          <button id="tab-docs" class="tab-btn active">Docs</button>
-          <button id="tab-web" class="tab-btn">Web</button>
-          <button id="tab-conf" class="tab-btn">Confluence</button>
-          <button id="tab-octane" class="tab-btn">Octane</button>
-          <button id="tab-voice" class="tab-btn">Voice</button>
+          <button id="tab-chat" class="tab-btn active">Document Chat</button>
+          <button id="tab-sidebar" class="tab-btn">Settings</button>
         </div>
 
-        <!-- Octane configuration notice (shown only when Octane tab active and not configured) -->
-        <div id="octane-notice" class="alert warn" role="alert" style="display:none; margin: 0 16px 8px 16px;">
-          ALM Octane is not configured. Set octane_base_url, octane_client_id, and octane_client_secret in config.toml (or environment), then restart the app.
-        </div>
+        
 
         <div class="chat-container">
-          <div id="web-options" class="web-options" style="display:none; padding: 0 16px 8px 16px; font-size:12px; color: var(--muted);">
-            <span style="margin-right:10px;">Web pages:
-              <input id="web-max-results" type="number" value="5" min="1" max="10" style="width:56px; margin-left:6px;">
-            </span>
-            <span>Context k:
-              <input id="web-k-ctx" type="number" value="5" min="1" max="10" style="width:56px; margin-left:6px;">
-            </span>
-            <span style="margin-left:12px;">Web search:
-              <label style="margin-left:6px; cursor:pointer;">
-                <input id="web-search-enabled" type="checkbox" checked style="vertical-align:middle; margin-right:4px;"> enable
-              </label>
-            </span>
-          </div>
-          <div id="conf-options" class="conf-options" style="display:none; padding: 0 16px 8px 16px; font-size:12px; color: var(--muted);">
-            <span style="margin-right:10px;">Spaces:
-              <input id="conf-spaces" type="text" placeholder="SPACE1, SPACE2" style="width:220px; margin-left:6px;">
-            </span>
-            <span style="margin-right:10px;">Pages:
-              <input id="conf-max-results" type="number" value="5" min="1" max="10" style="width:56px; margin-left:6px;">
-            </span>
-            <span>Context k:
-              <input id="conf-k-ctx" type="number" value="5" min="1" max="10" style="width:56px; margin-left:6px;">
-            </span>
-          </div>
-          <div id="octane-options" class="octane-options" style="display:none; padding: 0 16px 8px 16px; font-size:12px; color: var(--muted);">
-            <span style="margin-right:10px;">Project ID:
-              <input id="octane-project-id" type="text" placeholder="e.g., 1001" style="width:120px; margin-left:6px;">
-            </span>
-            <span style="margin-right:10px;">Workspace ID:
-              <input id="octane-workspace-id" type="text" placeholder="e.g., 2001" style="width:120px; margin-left:6px;">
-            </span>
-            <span style="margin-right:10px;">Entities:
-              <input id="octane-max-results" type="number" value="5" min="1" max="10" style="width:56px; margin-left:6px;">
-            </span>
-            <span>Context k:
-              <input id="octane-k-ctx" type="number" value="5" min="1" max="10" style="width:56px; margin-left:6px;">
-            </span>
-          </div>
           <div id="messages-docs" class="messages"></div>
-          <div id="messages-web" class="messages" style="display:none;"></div>
-          <div id="messages-conf" class="messages" style="display:none;"></div>
-          <div id="messages-octane" class="messages" style="display:none;"></div>
-          <div id="voice-pane" style="display:none; padding: 16px;">
-            <div style="margin-bottom: 12px; font-size:13px; color: var(--text-secondary);">
-              Clone a voice from a short sample and synthesize speech from text. Voice cloning requires uploading a clear sample (10–30s).
+          <div id="sidebar-tab" class="sidebar-tab" style="display:none; padding: 16px;">
+            <div class="sidebar-tab-header" style="display:flex; justify-content:flex-end; gap:8px; margin-bottom:8px;">
+              <button class="new-chat-btn" id="new-chat" title="Start new chat">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M12 5v14M5 12h14"/>
+                </svg>
+              </button>
             </div>
-            <div style="display:flex; gap:16px; flex-wrap: wrap; align-items:flex-start;">
-              <div style="flex:1; min-width:280px;">
-                <h3 style="margin: 6px 0 8px 0;">Sample Upload</h3>
-                <div style="display:flex; gap:8px; align-items:center;">
-                  <input id="voice-sample-file" type="file" accept="audio/*" />
-                  <button id="btn-voice-upload" type="button" class="action-btn">Upload Sample</button>
-                  <button id="btn-voice-clear" type="button" class="action-btn danger">Clear Voice Data</button>
+            <section class="uploader">
+              <h3>Upload Documents</h3>
+              <form id="upload-form">
+                <div class="dropzone" id="dropzone">
+                  <input type="file" id="file" name="file" multiple />
+                  <div class="dz-instructions">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                      <polyline points="7,10 12,15 17,10"/>
+                      <line x1="12" y1="15" x2="12" y2="3"/>
+                    </svg>
+                    <span>Drop files here or click to browse</span>
+                  </div>
                 </div>
-                <div id="voice-rec-controls" style="margin-top:8px; display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
-                  <button id="btn-voice-rec" type="button" class="action-btn">Record</button>
-                  <button id="btn-voice-stop" type="button" class="action-btn warn" disabled>Stop</button>
-                  <button id="btn-voice-upload-rec" type="button" class="action-btn" disabled>Use Recording</button>
-                  <span id="voice-rec-timer" style="font-size:12px; color: var(--text-muted);">00:00</span>
-                </div>
-                <audio id="voice-rec-audio" controls style="margin-top:6px; width:100%; display:none;"></audio>
-                <div id="voice-status" class="upload-status" style="margin-top:6px;">No sample uploaded.</div>
+                <button type="submit" class="upload-btn">Upload Files</button>
+                <div id="upload-status" class="upload-status"></div>
+              </form>
+            </section>
+
+            <section class="chat-history">
+              <div class="history-header">
+                <h3>Chat History</h3>
+                <button id="btn-clear" type="button" class="clear-btn" title="Clear chat history">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M3 6h18M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6m3 0V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/>
+                  </svg>
+                </button>
               </div>
-              <div style="flex:2; min-width:320px;">
-                <h3 style="margin: 6px 0 8px 0;">Text To Speech</h3>
-                <div style="display:flex; gap:8px; align-items:center; margin-bottom:8px; flex-wrap:wrap;">
-                  <label>Voice:
-                    <select id="voice-voice-name" style="margin-left:6px;">
-                      <!-- Dynamic: a 'sample' option will appear when a sample is uploaded -->
-                      <option value="alloy">alloy</option>
-                      <option value="verse">verse</option>
-                      <option value="aria">aria</option>
-                      <option value="sage">sage</option>
-                    </select>
-                  </label>
-                  <label style="margin-left:12px;">Format:
-                    <select id="voice-audio-format" style="margin-left:6px;">
-                      <option value="mp3">mp3</option>
-                      <option value="wav">wav</option>
-                      <option value="ogg">ogg</option>
-                    </select>
-                  </label>
-                </div>
-                <textarea id="voice-tts-text" rows="3" placeholder="Type text to synthesize..." style="width:100%;"></textarea>
-                <div style="margin-top:8px; display:flex; gap:8px; align-items:center;">
-                  <button id="btn-voice-say" type="button" class="action-btn">Synthesize</button>
-                  <audio id="voice-audio" controls style="flex:1; max-width: 100%;"></audio>
-                </div>
-                <div id="voice-note" class="upload-status" style="margin-top:6px;"></div>
+              <div id="history-list" class="history-list"></div>
+              <div id="history-meta" class="history-meta"></div>
+            </section>
+
+            <section class="status-panel">
+              <h3>Status</h3>
+              <div class="status-row">
+                <span id="status-client" class="badge">OpenAI: …</span>
               </div>
-            </div>
+              <div class="status-row" style="margin-top:6px;">
+                <span id="status-index" class="badge">Index: …</span>
+              </div>
+              <div class="status-row" style="margin-top:6px;">
+                <span id="status-files" class="badge neutral">Files: …</span>
+              </div>
+              <div class="status-actions">
+                <button id="btn-rebuild" type="button" class="action-btn">Rebuild Index</button>
+                <button id="btn-cancel-rebuild" type="button" class="action-btn warn" style="display:none;">Cancel</button>
+                <button id="btn-clear-index" type="button" class="action-btn danger">Clear Index</button>
+                <button id="btn-clear-all" type="button" class="action-btn danger">Clear All Data</button>
+              </div>
+              <div class="progress" id="rebuild-progress-wrap">
+                <div id="rebuild-progress" class="progress-bar" style="width:0%"></div>
+              </div>
+              <div id="status-note" class="status-note"></div>
+            </section>
+
+            <section class="recent-files">
+              <h3>Upload History</h3>
+              <div id="recent-files-list" class="recent-files-list"></div>
+            </section>
           </div>
           <div class="chat-input-container">
             <form id="chat-form" class="chat-form">
@@ -247,73 +115,18 @@
       </main>
     </div>
 
-    <!-- Sidebar backdrop for mobile -->
-    <div class="sidebar-backdrop" id="sidebar-backdrop"></div>
+    
 
     <script>
       const $ = (sel) => document.querySelector(sel);
-      const OCTANE_READY = {{ 'true' if octane_ready else 'false' }};
-      let activeTab = 'docs';
+      let activeTab = 'chat';
       const messagesDocsEl = $("#messages-docs");
-      const messagesWebEl = $("#messages-web");
-      const messagesConfEl = $("#messages-conf");
-      const messagesOctEl = $("#messages-octane");
+      const sidebarTabEl = $("#sidebar-tab");
       const uploadForm = $("#upload-form");
       const chatForm = $("#chat-form");
-      // Web options (DDG search controls)
-      const webOptions = $('#web-options');
-      const inpWebMaxResults = $('#web-max-results');
-      const inpWebKCtx = $('#web-k-ctx');
-      const chkWebSearchEnabled = $('#web-search-enabled');
-      // Persist web search toggle in localStorage
-      if (chkWebSearchEnabled) {
-        try {
-          const saved = localStorage.getItem('web.search_enabled');
-          if (saved !== null) chkWebSearchEnabled.checked = saved === '1';
-        } catch (_) {}
-        chkWebSearchEnabled.addEventListener('change', () => {
-          try { localStorage.setItem('web.search_enabled', chkWebSearchEnabled.checked ? '1' : '0'); } catch (_) {}
-        });
-      }
-      // Confluence options
-      const confOptions = $('#conf-options');
-      const inpConfSpaces = $('#conf-spaces');
-      const inpConfMaxResults = $('#conf-max-results');
-      const inpConfKCtx = $('#conf-k-ctx');
-      // Octane options
-      const octaneOptions = $('#octane-options');
-      const inpOctProjectId = $('#octane-project-id');
-      const inpOctWorkspaceId = $('#octane-workspace-id');
-      const inpOctMaxResults = $('#octane-max-results');
-      const inpOctKCtx = $('#octane-k-ctx');
-      // Voice UI
-      const tabVoice = $('#tab-voice');
-      const voicePane = $('#voice-pane');
-      const inpVoiceFile = $('#voice-sample-file');
-      const btnVoiceUpload = $('#btn-voice-upload');
-      const btnVoiceClear = $('#btn-voice-clear');
-      const voiceStatus = $('#voice-status');
-      const voiceNote = $('#voice-note');
-      const selVoiceName = $('#voice-voice-name');
-      if (selVoiceName) {
-        selVoiceName.addEventListener('change', () => {
-          // Mark that the user explicitly chose a voice to avoid auto-switch
-          selVoiceName.dataset.userSelected = '1';
-        });
-      }
-      const selVoiceFmt = $('#voice-audio-format');
-      const inpVoiceText = $('#voice-tts-text');
-      const playerVoice = $('#voice-audio');
-      // Voice recording controls
-      const btnVoiceRec = $('#btn-voice-rec');
-      const btnVoiceStop = $('#btn-voice-stop');
-      const btnVoiceUploadRec = $('#btn-voice-upload-rec');
-      const recTimer = $('#voice-rec-timer');
-      const recAudio = $('#voice-rec-audio');
       const uploadStatus = $("#upload-status");
       const dropzone = $("#dropzone");
       const btnClear = $('#btn-clear');
-      const octaneNotice = $('#octane-notice');
       const historyList = $('#history-list');
       const historyMeta = $('#history-meta');
       const btnSend = $('#btn-send');
@@ -325,18 +138,9 @@
       const btnCancelRebuild = $('#btn-cancel-rebuild');
       const btnClearIndex = $('#btn-clear-index');
       const btnClearAll = $('#btn-clear-all');
-      const btnClearWeb = $('#btn-clear-web');
-      const btnClearConf = $('#btn-clear-conf');
-      const btnClearOctane = $('#btn-clear-octane');
       const progressWrap = $('#rebuild-progress-wrap');
       const progressBar = $('#rebuild-progress');
       const recentFilesList = $('#recent-files-list');
-
-      // Sidebar elements
-      const sidebar = $('#sidebar');
-      const sidebarToggle = $('#sidebar-toggle');
-      const sidebarClose = $('#sidebar-close');
-      const sidebarBackdrop = $('#sidebar-backdrop');
       const newChatBtn = $('#new-chat');
 
       function escapeHtml(str) {
@@ -753,10 +557,7 @@
       }
 
       function getMessagesEl() {
-        if (activeTab === 'docs') return messagesDocsEl;
-        if (activeTab === 'web') return messagesWebEl;
-        if (activeTab === 'conf') return messagesConfEl;
-        return messagesOctEl;
+        return messagesDocsEl;
       }
 
       function messageElFor(m) {
@@ -916,29 +717,7 @@
         historyMeta.textContent = `${count} message${count === 1 ? '' : 's'}`;
       }
 
-      // Sidebar toggle functionality
-      function isMobile() { return window.innerWidth <= 768; }
-      function toggleSidebar() {
-        sidebar.classList.toggle('collapsed');
-        if (isMobile()) {
-          sidebarBackdrop.classList.toggle('active');
-        } else {
-          // Ensure backdrop never blocks desktop UI
-          sidebarBackdrop.classList.remove('active');
-        }
-      }
-
-      function closeSidebar() {
-        sidebar.classList.add('collapsed');
-        sidebarBackdrop.classList.remove('active');
-      }
-
-      function openSidebar() {
-        sidebar.classList.remove('collapsed');
-        if (isMobile()) {
-          sidebarBackdrop.classList.add('active');
-        }
-      }
+      // Simple tab layout; no sidebar toggle
 
       async function refreshMessagesDocs() {
         try {
@@ -952,47 +731,11 @@
         } catch (e) { console.error(e); }
       }
 
-      async function refreshMessagesWeb() {
-        try {
-          const res = await fetch('/web/messages');
-          const data = await res.json();
-          if (!data.ok) return;
-          messagesWebEl.innerHTML = '';
-          (data.messages || []).forEach(m => appendMessageObj(m, messagesWebEl));
-          // Keep sidebar history in sync with active tab
-          renderHistoryList(data.messages || []);
-        } catch (e) { console.error(e); }
-      }
-
-      async function refreshMessagesConf() {
-        try {
-          const res = await fetch('/conf/messages');
-          const data = await res.json();
-          if (!data.ok) return;
-          messagesConfEl.innerHTML = '';
-          (data.messages || []).forEach(m => appendMessageObj(m, messagesConfEl));
-          // Keep sidebar history in sync with active tab
-          renderHistoryList(data.messages || []);
-        } catch (e) { console.error(e); }
-      }
-
-      async function refreshMessagesOctane() {
-        try {
-          const res = await fetch('/octane/messages');
-          const data = await res.json();
-          if (!data.ok) return;
-          messagesOctEl.innerHTML = '';
-          (data.messages || []).forEach(m => appendMessageObj(m, messagesOctEl));
-          // Keep sidebar history in sync with active tab
-          renderHistoryList(data.messages || []);
-        } catch (e) { console.error(e); }
-      }
+      // No other chat modes in simplified UI
 
       async function refreshCurrentMessages() {
-        if (activeTab === 'docs') return refreshMessagesDocs();
-        if (activeTab === 'web') return refreshMessagesWeb();
-        if (activeTab === 'conf') return refreshMessagesConf();
-        return refreshMessagesOctane();
+        if (activeTab === 'chat') return refreshMessagesDocs();
+        return;
       }
 
       let rebuildPoller = null;
@@ -1141,7 +884,7 @@
 
       chatForm.addEventListener('submit', async (e) => {
         e.preventDefault();
-        if (activeTab === 'voice') { return; }
+        if (activeTab !== 'chat') { return; }
         const input = $("#message");
         const text = input.value.trim();
         if (!text) return;
@@ -1156,92 +899,8 @@
         targetEl.appendChild(assistantLive);
         targetEl.scrollTop = targetEl.scrollHeight;
         try {
-          const isDocs = activeTab === 'docs';
-          const isWeb = activeTab === 'web';
-          const isConf = activeTab === 'conf';
-          const isOct = activeTab === 'octane';
-          const endpoint = isDocs ? '/chat_stream' : (isWeb ? '/webchat_stream' : (isConf ? '/confchat_stream' : '/octanechat_stream'));
+          const endpoint = '/chat_stream';
           const payload = { message: text };
-          // For Web chat, prefetch and show search info before streaming
-          if (isWeb) {
-            try {
-              const mrPrev = Math.max(1, Math.min(10, Number(inpWebMaxResults?.value || 5)));
-              const enabled = !!(chkWebSearchEnabled?.checked ?? true);
-              const prevRes = await fetch('/web/search_info', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ message: text, max_results: mrPrev, search_enabled: enabled })
-              });
-              const prevDj = await prevRes.json();
-              if (prevDj && prevDj.ok && prevDj.search) {
-                const bubble = assistantLive.querySelector('.bubble');
-                const details = document.createElement('details');
-                details.className = 'sources';
-                const summary = document.createElement('summary');
-                const engine = (prevDj.search.engine || 'Web');
-                const used = Array.isArray(prevDj.search.used_urls) ? prevDj.search.used_urls : [];
-                summary.textContent = `Search (${engine}: ${used.length})`;
-                details.appendChild(summary);
-                const list = document.createElement('ol');
-                list.className = 'sources-list';
-                const titleMap = new Map();
-                try { (prevDj.search.results || []).forEach(r => { if (r && r.url) titleMap.set(r.url, r.title || ''); }); } catch (_) {}
-                // Diagnostics: show a warning if no URLs or search error
-                try {
-                  const status = prevDj.search.status || {};
-                  const note = (typeof status.note === 'string' && status.note) ? status.note : null;
-                  const ok = (typeof status.ok === 'boolean') ? status.ok : true;
-                  if (used.length === 0 || !ok || note) {
-                    const warn = document.createElement('div');
-                    warn.className = 'note warn';
-                    warn.textContent = note ? `Web search: ${note}` : 'Web search returned no URLs. Paste a URL or check proxy/SSL settings.';
-                    details.appendChild(warn);
-                  }
-                } catch (_) {}
-                used.forEach((url) => {
-                  const li = document.createElement('li');
-                  li.className = 'source-item';
-                  const meta = document.createElement('div');
-                  meta.className = 'meta';
-                  if (isHttpUrl(url)) {
-                    const a = document.createElement('a');
-                    a.href = url;
-                    a.target = '_blank';
-                    a.rel = 'noopener';
-                    a.textContent = titleMap.get(url) || url;
-                    meta.appendChild(a);
-                  } else {
-                    meta.textContent = url || 'unknown';
-                  }
-                  li.appendChild(meta);
-                  list.appendChild(li);
-                });
-                // Always append the details panel so diagnostics are visible
-                if (used.length > 0) { details.appendChild(list); }
-                bubble.appendChild(details);
-              }
-            } catch (_) { /* non-fatal */ }
-          }
-          if (isWeb) {
-            const mr = Math.max(1, Math.min(10, Number(inpWebMaxResults?.value || 5)));
-            const kc = Math.max(1, Math.min(10, Number(inpWebKCtx?.value || 5)));
-            payload.max_results = mr;
-            payload.k_ctx = kc;
-            payload.search_enabled = !!(chkWebSearchEnabled?.checked ?? true);
-          } else if (isConf) {
-            const mr = Math.max(1, Math.min(10, Number(inpConfMaxResults?.value || 5)));
-            const kc = Math.max(1, Math.min(10, Number(inpConfKCtx?.value || 5)));
-            payload.max_results = mr;
-            payload.k_ctx = kc;
-            payload.spaces = (inpConfSpaces?.value || '').trim();
-          } else if (isOct) {
-            const mr = Math.max(1, Math.min(10, Number(inpOctMaxResults?.value || 5)));
-            const kc = Math.max(1, Math.min(10, Number(inpOctKCtx?.value || 5)));
-            payload.max_results = mr;
-            payload.k_ctx = kc;
-            payload.project_id = (inpOctProjectId?.value || '').trim();
-            payload.workspace_id = (inpOctWorkspaceId?.value || '').trim();
-          }
           const res = await fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
           if (res.ok && res.body) {
             const reader = res.body.getReader();
@@ -1260,8 +919,7 @@
             // After stream ends, persist the conversation on the server
             let committed = false;
             try {
-              const commitEndpoint = isDocs ? '/chat/commit' : (isWeb ? '/webchat/commit' : (isConf ? '/conf/commit' : '/octane/commit'));
-              const saveRes = await fetch(commitEndpoint, {
+              const saveRes = await fetch('/chat/commit', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ question: text, answer: acc })
@@ -1282,27 +940,7 @@
             }
           } else {
             const body = { message: text };
-            if (isWeb) {
-              const mr = Math.max(1, Math.min(10, Number(inpWebMaxResults?.value || 5)));
-              const kc = Math.max(1, Math.min(10, Number(inpWebKCtx?.value || 5)));
-              body.max_results = mr;
-              body.k_ctx = kc;
-              body.search_enabled = !!(chkWebSearchEnabled?.checked ?? true);
-            } else if (isConf) {
-              const mr = Math.max(1, Math.min(10, Number(inpConfMaxResults?.value || 5)));
-              const kc = Math.max(1, Math.min(10, Number(inpConfKCtx?.value || 5)));
-              body.max_results = mr;
-              body.k_ctx = kc;
-              body.spaces = (inpConfSpaces?.value || '').trim();
-            } else if (isOct) {
-              const mr = Math.max(1, Math.min(10, Number(inpOctMaxResults?.value || 5)));
-              const kc = Math.max(1, Math.min(10, Number(inpOctKCtx?.value || 5)));
-              body.max_results = mr;
-              body.k_ctx = kc;
-              body.project_id = (inpOctProjectId?.value || '').trim();
-              body.workspace_id = (inpOctWorkspaceId?.value || '').trim();
-            }
-            const r = await fetch(isDocs ? '/chat' : (isWeb ? '/webchat' : (isConf ? '/confchat' : '/octanechat')), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+            const r = await fetch('/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
             const dj = await r.json();
             if (dj.ok) { await refreshCurrentMessages(); }
             else { assistantBody.textContent = 'Error: ' + (dj.error || 'failed'); }
@@ -1327,32 +965,13 @@
         msgInput.style.height = Math.min(200, msgInput.scrollHeight) + 'px';
       });
 
-      // Sidebar event listeners
-      sidebarToggle.addEventListener('click', toggleSidebar);
-      sidebarClose.addEventListener('click', closeSidebar);
-      sidebarBackdrop.addEventListener('click', closeSidebar);
-
-      // Handle escape key to close sidebar
-      document.addEventListener('keydown', (e) => {
-        if (e.key === 'Escape' && !sidebar.classList.contains('collapsed')) {
-          closeSidebar();
-        }
-      });
+      // No sidebar element; tabs control visibility
 
       btnClear.addEventListener('click', async () => {
         const sure = confirm('Clear chat history for this session?');
         if (!sure) return;
         try {
-          const res = await fetch(
-            activeTab === 'docs' ? '/clear' : (
-              activeTab === 'web' ? '/web/clear' : (
-                activeTab === 'conf' ? '/conf/clear' : (
-                  activeTab === 'octane' ? '/octane/clear' : '/voice/clear'
-                )
-              )
-            ),
-            { method: 'POST' }
-          );
+          const res = await fetch('/clear', { method: 'POST' });
           const data = await res.json();
           if (data.ok) {
             await refreshCurrentMessages();
@@ -1366,16 +985,7 @@
 
       newChatBtn.addEventListener('click', async () => {
         try {
-          const res = await fetch(
-            activeTab === 'docs' ? '/clear' : (
-              activeTab === 'web' ? '/web/clear' : (
-                activeTab === 'conf' ? '/conf/clear' : (
-                  activeTab === 'octane' ? '/octane/clear' : '/voice/clear'
-                )
-              )
-            ),
-            { method: 'POST' }
-          );
+          const res = await fetch('/clear', { method: 'POST' });
           const data = await res.json();
           if (data.ok) {
             await refreshCurrentMessages();
@@ -1388,105 +998,27 @@
       });
 
       // Tabs behavior
-      const tabDocs = $('#tab-docs');
-      const tabWeb = $('#tab-web');
-      const tabConf = $('#tab-conf');
-      const tabOct = $('#tab-octane');
+      const tabChat = $('#tab-chat');
+      const tabSidebar = $('#tab-sidebar');
       function setActiveTab(tab) {
         activeTab = tab;
-        if (tab === 'docs') {
-          tabDocs.classList.add('active');
-          tabWeb.classList.remove('active');
-          tabConf.classList.remove('active');
-          tabOct.classList.remove('active');
-          if (tabVoice) tabVoice.classList.remove('active');
+        if (tab === 'chat') {
+          tabChat.classList.add('active');
+          tabSidebar.classList.remove('active');
           messagesDocsEl.style.display = '';
-          messagesWebEl.style.display = 'none';
-          messagesConfEl.style.display = 'none';
-          messagesOctEl.style.display = 'none';
-          if (voicePane) voicePane.style.display = 'none';
-          if (webOptions) webOptions.style.display = 'none';
-          if (confOptions) confOptions.style.display = 'none';
-          if (octaneOptions) octaneOptions.style.display = 'none';
-          if (octaneNotice) octaneNotice.style.display = 'none';
+          if (sidebarTabEl) sidebarTabEl.style.display = 'none';
           $('.chat-input-container').style.display = '';
         } else {
-          tabDocs.classList.remove('active');
-          if (tab === 'web') {
-            tabWeb.classList.add('active');
-            tabConf.classList.remove('active');
-            tabOct.classList.remove('active');
-            if (tabVoice) tabVoice.classList.remove('active');
-            messagesWebEl.style.display = '';
-            messagesDocsEl.style.display = 'none';
-            messagesConfEl.style.display = 'none';
-            messagesOctEl.style.display = 'none';
-            if (voicePane) voicePane.style.display = 'none';
-            if (webOptions) webOptions.style.display = '';
-            if (confOptions) confOptions.style.display = 'none';
-            if (octaneOptions) octaneOptions.style.display = 'none';
-            if (octaneNotice) octaneNotice.style.display = 'none';
-            $('.chat-input-container').style.display = '';
-          } else {
-            if (tab === 'conf') {
-              tabConf.classList.add('active');
-              tabWeb.classList.remove('active');
-              tabOct.classList.remove('active');
-              if (tabVoice) tabVoice.classList.remove('active');
-              messagesConfEl.style.display = '';
-              messagesDocsEl.style.display = 'none';
-              messagesWebEl.style.display = 'none';
-              messagesOctEl.style.display = 'none';
-              if (voicePane) voicePane.style.display = 'none';
-              if (webOptions) webOptions.style.display = 'none';
-              if (confOptions) confOptions.style.display = '';
-              if (octaneOptions) octaneOptions.style.display = 'none';
-              if (octaneNotice) octaneNotice.style.display = 'none';
-              $('.chat-input-container').style.display = '';
-            } else {
-              if (tab === 'octane') {
-                tabOct.classList.add('active');
-                tabWeb.classList.remove('active');
-                tabConf.classList.remove('active');
-                if (tabVoice) tabVoice.classList.remove('active');
-                messagesOctEl.style.display = '';
-                messagesDocsEl.style.display = 'none';
-                messagesWebEl.style.display = 'none';
-                messagesConfEl.style.display = 'none';
-                if (voicePane) voicePane.style.display = 'none';
-                if (webOptions) webOptions.style.display = 'none';
-                if (confOptions) confOptions.style.display = 'none';
-                if (octaneOptions) octaneOptions.style.display = '';
-                if (octaneNotice) octaneNotice.style.display = OCTANE_READY ? 'none' : '';
-                $('.chat-input-container').style.display = '';
-              } else {
-                // Voice tab
-                if (tabVoice) tabVoice.classList.add('active');
-                tabWeb.classList.remove('active');
-                tabConf.classList.remove('active');
-                tabOct.classList.remove('active');
-                messagesDocsEl.style.display = 'none';
-                messagesWebEl.style.display = 'none';
-                messagesConfEl.style.display = 'none';
-                messagesOctEl.style.display = 'none';
-                if (webOptions) webOptions.style.display = 'none';
-                if (confOptions) confOptions.style.display = 'none';
-                if (octaneOptions) octaneOptions.style.display = 'none';
-                if (octaneNotice) octaneNotice.style.display = 'none';
-                if (voicePane) voicePane.style.display = '';
-                $('.chat-input-container').style.display = 'none';
-                refreshVoiceStatus();
-              }
-            }
-          }
+          tabChat.classList.remove('active');
+          tabSidebar.classList.add('active');
+          messagesDocsEl.style.display = 'none';
+          if (sidebarTabEl) sidebarTabEl.style.display = '';
+          $('.chat-input-container').style.display = 'none';
         }
-        if (tab !== 'voice') refreshCurrentMessages();
+        refreshCurrentMessages();
       }
-      tabDocs.addEventListener('click', () => setActiveTab('docs'));
-      tabWeb.addEventListener('click', () => setActiveTab('web'));
-      tabConf.addEventListener('click', () => setActiveTab('conf'));
-      tabOct.addEventListener('click', () => setActiveTab('octane'));
-      if (tabVoice) tabVoice.addEventListener('click', () => setActiveTab('voice'));
+      tabChat.addEventListener('click', () => setActiveTab('chat'));
+      tabSidebar.addEventListener('click', () => setActiveTab('sidebar'));
 
       // Initial load
       refreshMessagesDocs();
@@ -1575,344 +1107,9 @@
         }
       });
 
-      btnClearWeb.addEventListener('click', async () => {
-        const sure = confirm('Clear cached web pages (Web RAG index)? This deletes the web FAISS index and metadata.');
-        if (!sure) return;
-        btnClearWeb.disabled = true;
-        statusNote.textContent = 'Clearing web cache...';
-        try {
-          const res = await fetch('/web/index/clear_all', { method: 'POST' });
-          const data = await res.json();
-          if (data.ok) {
-            statusNote.textContent = 'Web cache cleared.';
-          } else {
-            statusNote.textContent = 'Clear web cache failed: ' + (data.error || 'unknown error');
-          }
-        } catch (e) {
-          statusNote.textContent = 'Web cache request failed.';
-        } finally {
-          btnClearWeb.disabled = false;
-        }
-      });
+      // Simplified: no external caches (web/conf/octane) controls
 
-      btnClearConf.addEventListener('click', async () => {
-        const sure = confirm('Clear cached Confluence pages (Confluence RAG index)? This deletes the Confluence FAISS index and metadata.');
-        if (!sure) return;
-        btnClearConf.disabled = true;
-        statusNote.textContent = 'Clearing Confluence cache...';
-        try {
-          const res = await fetch('/conf/index/clear_all', { method: 'POST' });
-          const data = await res.json();
-          if (data.ok) {
-            statusNote.textContent = 'Confluence cache cleared.';
-          } else {
-            statusNote.textContent = 'Clear Confluence cache failed: ' + (data.error || 'unknown error');
-          }
-        } catch (e) {
-          statusNote.textContent = 'Confluence cache request failed.';
-        } finally {
-          btnClearConf.disabled = false;
-        }
-      });
-
-      btnClearOctane.addEventListener('click', async () => {
-        const sure = confirm('Clear cached Octane items (Octane RAG index)? This deletes the Octane FAISS index and metadata.');
-        if (!sure) return;
-        btnClearOctane.disabled = true;
-        statusNote.textContent = 'Clearing Octane cache...';
-        try {
-          const res = await fetch('/octane/index/clear_all', { method: 'POST' });
-          const data = await res.json();
-          if (data.ok) {
-            statusNote.textContent = 'Octane cache cleared.';
-          } else {
-            statusNote.textContent = 'Clear Octane cache failed: ' + (data.error || 'unknown error');
-          }
-        } catch (e) {
-          statusNote.textContent = 'Octane cache request failed.';
-        } finally {
-          btnClearOctane.disabled = false;
-        }
-      });
-
-      // Voice tab logic
-      async function refreshVoiceStatus() {
-        try {
-          const res = await fetch('/voice/status');
-          const data = await res.json();
-          if (!data.ok) { voiceStatus.textContent = 'Voice: unavailable'; return; }
-          const has = !!data.sample_exists;
-          voiceStatus.textContent = has ? `Sample: ${data.sample_name || 'ready'}` : 'No sample uploaded.';
-          voiceNote.textContent = 'Local TTS active (WAV output). If a sample is uploaded and a Coqui model is configured, zero-shot cloning is used.';
-          // Sync dropdown with sample status
-          try {
-            const sel = selVoiceName;
-            if (sel) {
-              let sampleOpt = sel.querySelector('option[value="sample"]');
-              if (has) {
-                if (!sampleOpt) {
-                  sampleOpt = document.createElement('option');
-                  sampleOpt.value = 'sample';
-                  sel.insertBefore(sampleOpt, sel.firstChild);
-                }
-                sampleOpt.textContent = data.sample_name ? `sample: ${data.sample_name}` : 'sample (uploaded)';
-                if (sel.value !== 'sample' && !sel.dataset.userSelected) {
-                  sel.value = 'sample';
-                }
-              } else if (sampleOpt) {
-                const wasSelected = sel.value === 'sample';
-                sampleOpt.remove();
-                if (wasSelected) {
-                  sel.value = sel.options.length ? sel.options[0].value : '';
-                }
-              }
-            }
-          } catch (_) {}
-        } catch (e) {
-          voiceStatus.textContent = 'Voice status unavailable';
-        }
-      }
-
-      // --- Voice recording logic (MediaRecorder) ---
-      let mediaStream = null;
-      let mediaRecorder = null;
-      let recChunks = [];
-      let recBlob = null;
-      let recTimerInt = null;
-      let recStartMs = 0;
-
-      function fmtMMSS(ms) {
-        const s = Math.max(0, Math.floor(ms / 1000));
-        const mm = String(Math.floor(s / 60)).padStart(2, '0');
-        const ss = String(s % 60).padStart(2, '0');
-        return `${mm}:${ss}`;
-      }
-
-      function setRecUI(recording) {
-        if (btnVoiceRec) btnVoiceRec.disabled = !!recording;
-        if (btnVoiceStop) btnVoiceStop.disabled = !recording;
-        if (btnVoiceUploadRec) btnVoiceUploadRec.disabled = !recBlob;
-      }
-
-      function clearRec() {
-        try { if (mediaRecorder && mediaRecorder.state !== 'inactive') mediaRecorder.stop(); } catch(_){}
-        try { if (mediaStream) mediaStream.getTracks().forEach(t => t.stop()); } catch(_){}
-        mediaRecorder = null;
-        mediaStream = null;
-        recChunks = [];
-        recBlob = null;
-        if (recAudio) { recAudio.src = ''; recAudio.style.display = 'none'; }
-        if (recTimer) recTimer.textContent = '00:00';
-        if (recTimerInt) { clearInterval(recTimerInt); recTimerInt = null; }
-        setRecUI(false);
-      }
-
-      function pickAudioMime() {
-        const cands = [
-          'audio/webm;codecs=opus',
-          'audio/webm',
-          'audio/ogg;codecs=opus',
-          'audio/ogg'
-        ];
-        for (const m of cands) {
-          try { if (window.MediaRecorder && MediaRecorder.isTypeSupported(m)) return m; } catch(_){}
-        }
-        return '';
-      }
-
-      if (btnVoiceRec) {
-        btnVoiceRec.addEventListener('click', async () => {
-          if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-            voiceStatus.textContent = 'Recording not supported in this browser.';
-            return;
-          }
-          try {
-            mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-          } catch (e) {
-            voiceStatus.textContent = 'Microphone permission denied.';
-            return;
-          }
-          try {
-            const mime = pickAudioMime();
-            recChunks = [];
-            recBlob = null;
-            if (recAudio) { recAudio.src = ''; recAudio.style.display = 'none'; }
-            mediaRecorder = new MediaRecorder(mediaStream, mime ? { mimeType: mime } : undefined);
-            mediaRecorder.ondataavailable = (ev) => {
-              if (ev && ev.data && ev.data.size > 0) recChunks.push(ev.data);
-            };
-            mediaRecorder.onstop = () => {
-              try { if (recTimerInt) { clearInterval(recTimerInt); recTimerInt = null; } } catch(_){}
-              try { if (mediaStream) mediaStream.getTracks().forEach(t => t.stop()); } catch(_){}
-              mediaStream = null;
-              const type = mediaRecorder && mediaRecorder.mimeType ? mediaRecorder.mimeType : (mime || 'audio/webm');
-              recBlob = new Blob(recChunks, { type });
-              const url = URL.createObjectURL(recBlob);
-              if (recAudio) {
-                recAudio.src = url;
-                recAudio.style.display = 'block';
-              }
-              setRecUI(false);
-              if (btnVoiceUploadRec) btnVoiceUploadRec.disabled = !recBlob;
-              voiceStatus.textContent = 'Recording ready. Click "Use Recording" to upload as sample.';
-            };
-            mediaRecorder.start(100);
-            recStartMs = Date.now();
-            if (recTimer) recTimer.textContent = '00:00';
-            if (recTimerInt) { clearInterval(recTimerInt); recTimerInt = null; }
-            recTimerInt = setInterval(() => {
-              if (recTimer) recTimer.textContent = fmtMMSS(Date.now() - recStartMs);
-            }, 250);
-            setRecUI(true);
-            voiceStatus.textContent = 'Recording... speak your sample (10–30s ideal).';
-          } catch (e) {
-            voiceStatus.textContent = 'Failed to start recording.';
-            clearRec();
-          }
-        });
-      }
-
-      if (btnVoiceStop) {
-        btnVoiceStop.addEventListener('click', () => {
-          try { if (mediaRecorder && mediaRecorder.state !== 'inactive') mediaRecorder.stop(); } catch(_){}
-        });
-      }
-
-      if (btnVoiceUploadRec) {
-        btnVoiceUploadRec.addEventListener('click', async () => {
-          if (!recBlob) { voiceStatus.textContent = 'No recording to upload.'; return; }
-          btnVoiceUploadRec.disabled = true;
-          voiceStatus.textContent = 'Uploading recording...';
-          try {
-            const fd = new FormData();
-            // Use a reasonable extension; server accepts .webm/.ogg/.wav
-            const fname = (recBlob.type && recBlob.type.includes('ogg')) ? 'recording.ogg' : 'recording.webm';
-            fd.append('file', recBlob, fname);
-            const res = await fetch('/voice/upload_sample', { method: 'POST', body: fd });
-            const data = await res.json();
-            if (data.ok) {
-              voiceStatus.textContent = `Sample uploaded: ${data.sample_name || fname}`;
-              refreshVoiceStatus();
-            } else {
-              voiceStatus.textContent = 'Upload failed: ' + (data.error || 'unknown error');
-            }
-          } catch (e) {
-            voiceStatus.textContent = 'Upload request failed.';
-          } finally {
-            btnVoiceUploadRec.disabled = false;
-          }
-        });
-      }
-
-      if (btnVoiceUpload) {
-        btnVoiceUpload.addEventListener('click', async () => {
-          const f = inpVoiceFile?.files?.[0];
-          if (!f) { voiceStatus.textContent = 'Pick an audio file first.'; return; }
-          btnVoiceUpload.disabled = true;
-          voiceStatus.textContent = 'Uploading sample...';
-          try {
-            const fd = new FormData();
-            fd.append('file', f, f.name);
-            const res = await fetch('/voice/upload_sample', { method: 'POST', body: fd });
-            const data = await res.json();
-            if (data.ok) {
-              voiceStatus.textContent = `Sample uploaded: ${data.sample_name || f.name}`;
-            } else {
-              voiceStatus.textContent = 'Upload failed: ' + (data.error || 'unknown error');
-            }
-          } catch (e) {
-            voiceStatus.textContent = 'Upload request failed.';
-          } finally {
-            btnVoiceUpload.disabled = false;
-          }
-        });
-      }
-
-      if (btnVoiceClear) {
-        btnVoiceClear.addEventListener('click', async () => {
-          const sure = confirm('Clear uploaded voice sample and generated audio?');
-          if (!sure) return;
-          btnVoiceClear.disabled = true;
-          try {
-            const res = await fetch('/voice/clear', { method: 'POST' });
-            const data = await res.json();
-            if (data.ok) {
-              voiceStatus.textContent = 'Voice data cleared.';
-              playerVoice.src = '';
-              clearRec();
-            } else {
-              voiceStatus.textContent = 'Clear failed: ' + (data.error || 'unknown error');
-            }
-          } catch (e) {
-            voiceStatus.textContent = 'Clear request failed.';
-          } finally {
-            btnVoiceClear.disabled = false;
-          }
-        });
-      }
-
-      const btnVoiceSay = $('#btn-voice-say');
-      if (btnVoiceSay) {
-        btnVoiceSay.addEventListener('click', async () => {
-          const text = (inpVoiceText?.value || '').trim();
-          if (!text) { voiceNote.textContent = 'Enter text to synthesize.'; return; }
-          voiceNote.textContent = 'Synthesizing...';
-          btnVoiceSay.disabled = true;
-          try {
-            const res = await fetch('/voice/tts', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                text,
-                voice_name: selVoiceName?.value || 'alloy',
-                format: selVoiceFmt?.value || 'mp3',
-              }),
-            });
-            if (res.ok) {
-              const blob = await res.blob();
-              const url = URL.createObjectURL(blob);
-              playerVoice.src = url;
-              playerVoice.play().catch(()=>{});
-              voiceNote.textContent = '';
-            } else {
-              // Fallback to browser speech synthesis when local TTS is unavailable
-              let errText = 'TTS failed.';
-              try { const dj = await res.json(); if (dj && dj.error) errText = 'TTS failed: ' + dj.error; } catch (_) {}
-              const canSpeak = 'speechSynthesis' in window && 'SpeechSynthesisUtterance' in window;
-              if (canSpeak) {
-                const utterance = new SpeechSynthesisUtterance(text);
-                try {
-                  const want = (selVoiceName?.value || '').toLowerCase();
-                  const voices = window.speechSynthesis.getVoices?.() || [];
-                  const match = voices.find(v => (v.name || '').toLowerCase().includes(want)) || null;
-                  if (match) utterance.voice = match;
-                } catch (_) {}
-                window.speechSynthesis.speak(utterance);
-                voiceNote.textContent = errText + ' Using browser speech synthesis as fallback (no audio file).';
-              } else {
-                voiceNote.textContent = errText + ' No fallback available.';
-              }
-            }
-          } catch (e) {
-            const canSpeak = 'speechSynthesis' in window && 'SpeechSynthesisUtterance' in window;
-            if (canSpeak) {
-              const utterance = new SpeechSynthesisUtterance((inpVoiceText?.value || '').trim());
-              try {
-                const want = (selVoiceName?.value || '').toLowerCase();
-                const voices = window.speechSynthesis.getVoices?.() || [];
-                const match = voices.find(v => (v.name || '').toLowerCase().includes(want)) || null;
-                if (match) utterance.voice = match;
-              } catch (_) {}
-              window.speechSynthesis.speak(utterance);
-              voiceNote.textContent = 'TTS request failed. Using browser speech synthesis as fallback (no audio file).';
-            } else {
-              voiceNote.textContent = 'TTS request failed.';
-            }
-          } finally {
-            btnVoiceSay.disabled = false;
-          }
-        });
-      }
+      // No voice tab in this simplified UI
     </script>
   </body>
   </html>

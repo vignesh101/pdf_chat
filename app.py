@@ -17,7 +17,8 @@ from octane_client import OctaneAPI
 def create_app() -> Flask:
     cfg = load_config()
     app = Flask(__name__)
-    app.config['SECRET_KEY'] = cfg.secret_key or os.environ.get('FLASK_SECRET', 'dev-secret-change-me')
+    # Read secret from config.toml; fall back to a dev default if missing
+    app.config['SECRET_KEY'] = cfg.secret_key or 'dev-secret-change-me'
     # Always reload templates when changed (helps avoid stale UI in dev)
     app.config['TEMPLATES_AUTO_RELOAD'] = True
     # Aggressively disable client caching in development to avoid stale HTML/CSS
@@ -1582,4 +1583,5 @@ def create_app() -> Flask:
 app = create_app()
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    # Avoid Werkzeug debug shared-memory usage in restricted environments
+    app.run(host='0.0.0.0', port=5000, debug=False)

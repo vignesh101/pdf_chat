@@ -166,3 +166,40 @@ coqui_tts_language = "en"           # optional language hint for multilingual mo
 ```
 
 Then ensure the model is available (downloaded on first use by Coqui TTS, or point to a local model path). Note some models are large and CPU generation can be slow.
+
+## Docker
+
+This image reads all settings from `config.toml` inside the container. No environment variables are required.
+
+Prepare config:
+
+```
+cp config.example.toml config.toml
+# Edit config.toml with your values (including secret_key)
+```
+
+Build (no TTS for a smaller image):
+
+```
+docker build -t document-chat .
+```
+
+Optional: include TTS/pyttsx3 (larger image):
+
+```
+docker build --build-arg INSTALL_TTS=true -t document-chat:tts .
+```
+
+Run (no extra env parameters):
+
+```
+docker run --rm -p 5000:5000 document-chat
+```
+
+Then open http://localhost:5000.
+
+Notes:
+- The image bundles the `config.toml` present at build time. If you need to change settings without rebuilding, you can mount a config file: `-v $(pwd)/config.toml:/app/config.toml:ro`.
+- To persist indices and sessions across restarts, mount the data directory: `-v $(pwd)/data:/app/data`.
+- For Atlassian Cloud, set `confluence_access_token = "email@example.com:API_TOKEN"` in config.toml (sent as Basic auth).
+- For Confluence Server/DC PATs, set only the token (sent as Bearer), and set `confluence_base_url` to your site root. The app tries `/wiki/rest/api` and `/rest/api` automatically.

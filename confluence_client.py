@@ -33,6 +33,7 @@ class ConfluenceAPI:
     """
 
     def __init__(self, base_url: str, access_token: str, http_client: httpx.Client):
+        # Accept base URL with or without trailing '/wiki'
         self.base_url = (base_url or "").rstrip("/")
         self.token = access_token or ""
         self.http = http_client
@@ -46,13 +47,34 @@ class ConfluenceAPI:
             return {"Authorization": f"Bearer {self.token}"}
 
     def _url_candidates(self, path: str) -> List[str]:
-        base = self.base_url
+        base = self.base_url.rstrip("/")
         p = path.lstrip("/")
-        # Prefer /wiki/rest/api for Cloud; also try /rest/api for Server/DC
+        # If base already ends with /wiki, avoid duplicating it
+        if base.endswith("/wiki"):
+            root = base[:-5]  # strip trailing '/wiki'
+            return [
+                f"{base}/rest/api/{p}",      # https://host/wiki/rest/api/...
+                f"{root}/rest/api/{p}",      # https://host/rest/api/... (Server/DC cases)
+            ]
+        # Otherwise try Cloud first, then Server/DC
         return [
             f"{base}/wiki/rest/api/{p}",
             f"{base}/rest/api/{p}",
         ]
+
+    def _absolute_url(self, url: str | None) -> str:
+        """Return absolute URL for Confluence page links (handles relative '/wiki/...' cases)."""
+        u = (url or '').strip()
+        if not u:
+            return ""
+        if u.startswith("http://") or u.startswith("https://"):
+            return u
+        # Build from site root
+        base = self.base_url.rstrip("/")
+        # If we were given '/wiki/...', keep it; otherwise just join
+        if u.startswith("/"):
+            return f"{base}{u}"
+        return f"{base}/{u}"
 
     def search_pages(self, query: str, spaces: Optional[List[str]] = None, limit: int = 5) -> List[Dict[str, Any]]:
         if not query.strip():
@@ -84,7 +106,7 @@ class ConfluenceAPI:
                         content = it.get("content") or {}
                         cid = str(content.get("id") or "")
                         title = content.get("title") or it.get("title") or ""
-                        page_url = it.get("url") or ""
+                        page_url = self._absolute_url(it.get("url") or "")
                         out.append({"id": cid, "title": title, "url": page_url})
                     except Exception:
                         continue
@@ -98,7 +120,7 @@ class ConfluenceAPI:
         """Return (text, title) for a Confluence page id."""
         headers = {"Accept": "application/json"}
         headers.update(self._auth_headers())
-        params = {"expand": "body.view,body.storage"}
+        params = {"expand": "body.view,body.export_view,body.storage"}
         for url in self._url_candidates(f"content/{page_id}"):
             try:
                 r = self.http.get(url, params=params, headers=headers, follow_redirects=True)
@@ -114,6 +136,11 @@ class ConfluenceAPI:
                     html_view = None
                 if not html_view:
                     try:
+                        html_view = (body.get("export_view") or {}).get("value")
+                    except Exception:
+                        html_view = None
+                if not html_view:
+                    try:
                         html_view = (body.get("storage") or {}).get("value")
                     except Exception:
                         html_view = None
@@ -124,4 +151,3 @@ class ConfluenceAPI:
             except Exception:
                 continue
         return "", None
-

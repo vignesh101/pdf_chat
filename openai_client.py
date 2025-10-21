@@ -24,13 +24,24 @@ def build_openai_client(cfg: AppConfig) -> Optional[OpenAI]:
 
 
 def build_httpx_client(cfg: AppConfig) -> httpx.Client:
-    """Build a plain HTTPX client honoring proxy and SSL verify settings."""
-    return httpx.Client(
-        timeout=httpx.Timeout(60.0, connect=30.0, read=60.0, write=60.0),
-        proxy=cfg.proxy_url if cfg.proxy_url else None,
-        verify=False if cfg.disable_ssl else True,
-        headers={
-            # Modest default UA to avoid overly suspicious default client idents
-            'User-Agent': 'document-chat/1.0 (+https://localhost)'
-        },
-    )
+    """Build a plain HTTPX client honoring proxy and SSL verify settings.
+
+    Compatible with multiple httpx versions: tries 'proxies', then 'proxy', then no proxy.
+    """
+    timeout = httpx.Timeout(60.0, connect=30.0, read=60.0, write=60.0)
+    verify = False if cfg.disable_ssl else True
+    headers = {
+        'User-Agent': 'document-chat/1.0 (+https://localhost)'
+    }
+    proxy_url = cfg.proxy_url or None
+
+    # Try modern/legacy signatures gracefully
+    if proxy_url:
+        try:
+            return httpx.Client(timeout=timeout, verify=verify, headers=headers, proxies=proxy_url)
+        except TypeError:
+            try:
+                return httpx.Client(timeout=timeout, verify=verify, headers=headers, proxy=proxy_url)  # type: ignore
+            except TypeError:
+                pass
+    return httpx.Client(timeout=timeout, verify=verify, headers=headers)
